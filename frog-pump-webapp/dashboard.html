@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#22c55e">
+    <meta name="description" content="Monitor and control your Frog Pump">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FrogPump">
+
+    <title>Frog Pump - Dashboard</title>
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+</head>
+<body>
+    <div class="page-wrapper">
+        <!-- Header -->
+        <header class="header">
+            <div class="container">
+                <div class="header-content">
+                    <!-- Logo -->
+                    <div class="header-logo">
+                        <span class="logo-icon">🐸</span>
+                        <span>Frog Pump</span>
+                    </div>
+
+                    <!-- Device Info -->
+                    <div class="header-device-info">
+                        <span id="deviceName" class="header-device-name">Loading...</span>
+                        <span id="deviceIdDisplay" class="header-device-id">--</span>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="header-actions">
+                        <button id="changeDeviceBtn" class="btn btn-outline btn-sm" title="Change Device">
+                            📱
+                        </button>
+                        <button id="logoutBtn" class="btn btn-outline btn-sm" title="Logout">
+                            🚪
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Connection Status Banner -->
+        <div id="connectionBanner" class="connection-banner connecting">
+            🟡 Connecting...
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="container">
+                <div class="dashboard-grid">
+
+                    <!-- Status Card -->
+                    <section class="card full-width">
+                        <div class="card-header">
+                            <h2 class="card-title">📊 Pump Status</h2>
+                            <span id="lastUpdated" class="text-muted" style="font-size: 0.75rem;">--</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-grid">
+                                <div class="status-item">
+                                    <div class="status-item-icon" id="pumpStatus">⏹️ Stopped</div>
+                                    <div class="status-item-label">Status</div>
+                                </div>
+                                <div class="status-item">
+                                    <div class="status-item-value" id="currentRPM">0</div>
+                                    <div class="status-item-label">RPM</div>
+                                </div>
+                                <div class="status-item">
+                                    <div class="status-item-value" id="direction">↻ CW</div>
+                                    <div class="status-item-label">Direction</div>
+                                </div>
+                                <div class="status-item">
+                                    <div class="status-item-value" id="flowRate">N/A</div>
+                                    <div class="status-item-label">Flow Rate</div>
+                                </div>
+                                <div class="status-item">
+                                    <div class="status-item-value" id="totalDispensed">0.000 L</div>
+                                    <div class="status-item-label">Total</div>
+                                </div>
+                            </div>
+
+                            <!-- Additional Status Info -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                                <div>
+                                    <span class="text-muted">Session: </span>
+                                    <span id="sessionDispensed">0.0 mL</span>
+                                </div>
+                                <div id="controlMode">
+                                    <span class="badge badge-neutral">🏠 LOCAL</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Calibration Warning -->
+                    <section id="calibrationWarning" class="warning-box full-width hidden">
+                        <div class="warning-box-header">
+                            ⚠️ Calibration Required
+                        </div>
+                        <div class="warning-box-content">
+                            <p>Volume-based dispense is not available.</p>
+                            <p>Please calibrate your device using the physical controls:</p>
+                            <ol>
+                                <li>Set Tube Size in Settings menu</li>
+                                <li>Run Calibration from Calibration menu</li>
+                            </ol>
+                        </div>
+                        <div class="warning-box-footer">
+                            ℹ️ RPM-based control is still available.
+                        </div>
+                    </section>
+
+                    <!-- Control Panel -->
+                    <section class="card full-width">
+                        <div class="card-header">
+                            <h2 class="card-title">🎮 Controls</h2>
+                        </div>
+                        <div class="card-body">
+                            <!-- Tabs -->
+                            <div class="tabs">
+                                <button id="rpmTab" class="tab-button active">
+                                    RPM Mode
+                                </button>
+                                <button id="volumeTab" class="tab-button">
+                                    Volume Mode
+                                </button>
+                            </div>
+
+                            <!-- RPM Panel -->
+                            <div id="rpmPanel" class="tab-panel active">
+                                <div class="control-section">
+                                    <!-- RPM Slider -->
+                                    <div class="slider-container">
+                                        <div class="slider-header">
+                                            <span class="slider-label">RPM</span>
+                                            <span class="slider-value" id="rpmValue">100</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            id="rpmSlider"
+                                            class="range-slider"
+                                            min="0"
+                                            max="300"
+                                            step="10"
+                                            value="100"
+                                        >
+                                    </div>
+
+                                    <!-- RPM Direct Input -->
+                                    <div class="control-row">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label class="form-label">Direct RPM Input</label>
+                                            <input
+                                                type="number"
+                                                id="rpmInput"
+                                                class="form-input"
+                                                min="0"
+                                                max="300"
+                                                value="100"
+                                            >
+                                        </div>
+
+                                        <div class="form-group" style="flex: 1;">
+                                            <label class="form-label">Duration (seconds)</label>
+                                            <input
+                                                type="number"
+                                                id="durationInput"
+                                                class="form-input"
+                                                min="0"
+                                                placeholder="0 = unlimited"
+                                                value=""
+                                            >
+                                        </div>
+                                    </div>
+
+                                    <!-- Direction -->
+                                    <div class="form-group">
+                                        <label class="form-label">Direction</label>
+                                        <div class="direction-toggle">
+                                            <button type="button" id="directionCW" class="direction-btn active">
+                                                ↻ CW (Clockwise)
+                                            </button>
+                                            <button type="button" id="directionCCW" class="direction-btn">
+                                                ↺ CCW (Counter-Clockwise)
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Control Buttons -->
+                                    <div class="control-buttons">
+                                        <button id="startBtn" class="btn btn-primary">
+                                            🟢 Start
+                                        </button>
+                                        <button id="stopBtn" class="btn btn-danger">
+                                            🔴 Stop
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Volume Panel -->
+                            <div id="volumePanel" class="tab-panel" style="position: relative;">
+                                <!-- Disabled Overlay -->
+                                <div id="volumeOverlay" class="hidden" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.8); border-radius: 8px; display: flex; align-items: center; justify-content: center; z-index: 10;">
+                                    <div style="text-align: center; color: var(--accent-yellow);">
+                                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚠️</div>
+                                        <div>Calibration Required</div>
+                                    </div>
+                                </div>
+
+                                <div class="control-section">
+                                    <!-- Volume Input -->
+                                    <div class="form-group">
+                                        <label class="form-label">Target Volume</label>
+                                        <div class="volume-input-group">
+                                            <input
+                                                type="number"
+                                                id="volumeInput"
+                                                class="form-input volume-input"
+                                                min="0.1"
+                                                max="9999"
+                                                step="0.1"
+                                                placeholder="0.0"
+                                                value=""
+                                            >
+                                            <span class="volume-unit">mL</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- RPM for Volume Mode -->
+                                    <div class="slider-container">
+                                        <div class="slider-header">
+                                            <span class="slider-label">Speed (RPM)</span>
+                                            <span class="slider-value" id="volumeRpmValue">100</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            id="volumeRpmSlider"
+                                            class="range-slider"
+                                            min="10"
+                                            max="300"
+                                            step="10"
+                                            value="100"
+                                        >
+                                    </div>
+
+                                    <!-- Direction for Volume Mode -->
+                                    <div class="form-group">
+                                        <label class="form-label">Direction</label>
+                                        <div class="direction-toggle">
+                                            <button type="button" id="volumeDirectionCW" class="direction-btn active">
+                                                ↻ CW
+                                            </button>
+                                            <button type="button" id="volumeDirectionCCW" class="direction-btn">
+                                                ↺ CCW
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Estimated Time -->
+                                    <div id="estimatedTime" class="estimation-box">
+                                        <div class="estimation-value">--</div>
+                                        <div class="estimation-label">Enter volume to calculate</div>
+                                    </div>
+
+                                    <!-- Dispense Button -->
+                                    <button id="dispenseBtn" class="btn btn-primary btn-full btn-lg mt-md">
+                                        🚀 Dispense
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Device Info Card -->
+                    <section class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">📱 Device Information</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="info-row">
+                                <span class="info-label">Device Name</span>
+                                <span class="info-value" id="infoDeviceName">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Device ID</span>
+                                <span class="info-value" id="infoDeviceId" style="font-family: monospace;">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Firmware</span>
+                                <span class="info-value" id="infoFirmware">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">IP Address</span>
+                                <span class="info-value" id="infoIP" style="font-family: monospace;">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">MAC Address</span>
+                                <span class="info-value" id="infoMAC" style="font-family: monospace;">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Last Seen</span>
+                                <span class="info-value" id="infoLastSeen">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Total Runtime</span>
+                                <span class="info-value" id="infoRuntime">--</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Settings Card (Read-Only) -->
+                    <section class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">⚙️ Device Settings</h2>
+                            <span class="badge badge-neutral">Read-Only</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="info-row">
+                                <span class="info-label">Tube Size</span>
+                                <span class="info-value" id="settingsTube">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Calibration</span>
+                                <span class="info-value" id="settingsMlPerRev">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Calibration Type</span>
+                                <span class="info-value" id="settingsCalibrationType">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Last Calibrated</span>
+                                <span class="info-value" id="settingsLastCalibrated">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Anti-Drip</span>
+                                <span class="info-value" id="settingsAntiDrip">--</span>
+                            </div>
+
+                            <div class="card-footer" style="font-size: 0.75rem; color: var(--text-muted);">
+                                ℹ️ Settings can only be changed from the device's physical controls.
+                            </div>
+                        </div>
+                    </section>
+
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- JavaScript Modules -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/device.js"></script>
+    <script src="js/dashboard.js"></script>
+
+    <!-- Page Initialization -->
+    <script>
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then((reg) => console.log('Service Worker registered:', reg.scope))
+                .catch((err) => console.log('Service Worker registration failed:', err));
+        }
+
+        // Initialize dashboard when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            Dashboard.initDashboard();
+        });
+    </script>
+</body>
+</html>

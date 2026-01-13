@@ -1,13 +1,13 @@
 {
-    "name": "Frog Pump Controller",
-    "short_name": "FrogPump",
-    "description": "Control and monitor your Frog Pump peristaltic pump",
+    "name": "SinoLab - IoT Device Control",
+    "short_name": "SinoLab",
+    "description": "Control and monitor your IoT devices from anywhere",
     "start_url": "/index.html",
     "scope": "/",
     "display": "standalone",
     "orientation": "portrait-primary",
-    "background_color": "#0f172a",
-    "theme_color": "#22c55e",
+    "background_color": "#0a0a0a",
+    "theme_color": "#facc15",
     "lang": "en",
     "categories": ["utilities", "productivity"],
     "icons": [
@@ -29,7 +29,7 @@
         {
             "name": "Dashboard",
             "short_name": "Dashboard",
-            "description": "Go to pump dashboard",
+            "description": "Go to device dashboard",
             "url": "/dashboard.html",
             "icons": [
                 {

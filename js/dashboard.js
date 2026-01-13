@@ -1,5 +1,5 @@
 /**
- * Frog Pump WebApp - Dashboard Module
+ * SinoLab WebApp - Dashboard Module
  * Real-time monitoring and pump control logic
  */
 
@@ -45,14 +45,11 @@ function initDashboard() {
         // Cache DOM elements
         cacheElements();
 
-        // Update header with device info
-        updateDeviceHeader();
+        // Update sidebar with device info
+        updateSidebarDeviceInfo();
 
         // Setup UI event handlers
         setupEventHandlers();
-
-        // Setup tabs
-        setupTabs();
 
         // Subscribe to real-time updates
         subscribeToDevice();
@@ -69,20 +66,21 @@ function initDashboard() {
  * Cache DOM elements for performance
  */
 function cacheElements() {
-    // Header
-    elements.deviceName = document.getElementById('deviceName');
-    elements.deviceIdDisplay = document.getElementById('deviceIdDisplay');
-    elements.connectionBanner = document.getElementById('connectionBanner');
+    // Sidebar elements
+    elements.sidebarDeviceId = document.getElementById('sidebarDeviceId');
+    elements.sidebarConnectionStatus = document.getElementById('sidebarConnectionStatus');
+    elements.mobileConnectionStatus = document.getElementById('mobileConnectionStatus');
 
-    // Status display
-    elements.pumpStatus = document.getElementById('pumpStatus');
+    // Status page elements
+    elements.pumpStatusIndicator = document.getElementById('pumpStatusIndicator');
     elements.currentRPM = document.getElementById('currentRPM');
     elements.direction = document.getElementById('direction');
     elements.flowRate = document.getElementById('flowRate');
-    elements.totalDispensed = document.getElementById('totalDispensed');
-    elements.sessionDispensed = document.getElementById('sessionDispensed');
     elements.controlMode = document.getElementById('controlMode');
+    elements.sessionDispensed = document.getElementById('sessionDispensed');
+    elements.totalDispensed = document.getElementById('totalDispensed');
     elements.lastUpdated = document.getElementById('lastUpdated');
+    elements.quickStopBtn = document.getElementById('quickStopBtn');
 
     // Calibration warning
     elements.calibrationWarning = document.getElementById('calibrationWarning');
@@ -95,18 +93,18 @@ function cacheElements() {
 
     // RPM controls
     elements.rpmSlider = document.getElementById('rpmSlider');
-    elements.rpmValue = document.getElementById('rpmValue');
     elements.rpmInput = document.getElementById('rpmInput');
-    elements.durationInput = document.getElementById('durationInput');
+    elements.onTimeInput = document.getElementById('onTimeInput');
+    elements.offTimeInput = document.getElementById('offTimeInput');
     elements.directionCW = document.getElementById('directionCW');
     elements.directionCCW = document.getElementById('directionCCW');
-    elements.startBtn = document.getElementById('startBtn');
+    elements.runBtn = document.getElementById('runBtn');
     elements.stopBtn = document.getElementById('stopBtn');
 
     // Volume controls
     elements.volumeInput = document.getElementById('volumeInput');
     elements.volumeRpmSlider = document.getElementById('volumeRpmSlider');
-    elements.volumeRpmValue = document.getElementById('volumeRpmValue');
+    elements.volumeRpmInput = document.getElementById('volumeRpmInput');
     elements.volumeDirectionCW = document.getElementById('volumeDirectionCW');
     elements.volumeDirectionCCW = document.getElementById('volumeDirectionCCW');
     elements.dispenseBtn = document.getElementById('dispenseBtn');
@@ -208,12 +206,12 @@ function unsubscribeFromDevice() {
 function setupConnectionMonitoring() {
     connectionListener = FirebaseApp.database.ref('.info/connected')
         .on('value', (snapshot) => {
-            updateConnectionBanner(snapshot.val() === true);
+            updateConnectionStatus(snapshot.val() === true);
         });
 
     // Also listen for custom event
     window.addEventListener('firebase-connection-change', (e) => {
-        updateConnectionBanner(e.detail.connected);
+        updateConnectionStatus(e.detail.connected);
     });
 }
 
@@ -222,32 +220,43 @@ function setupConnectionMonitoring() {
 // ========================================
 
 /**
- * Update device header
+ * Update sidebar device info
  */
-function updateDeviceHeader() {
-    if (elements.deviceIdDisplay) {
-        elements.deviceIdDisplay.textContent = currentDeviceId;
+function updateSidebarDeviceInfo() {
+    if (elements.sidebarDeviceId) {
+        elements.sidebarDeviceId.textContent = currentDeviceId;
     }
 }
 
 /**
- * Update connection banner
+ * Update connection status in sidebar and mobile header
  * @param {boolean} connected - Firebase connection status
  */
-function updateConnectionBanner(connected) {
-    if (!elements.connectionBanner) return;
-
+function updateConnectionStatus(connected) {
     const isOnline = deviceStatus?.online === true;
 
-    if (!connected) {
-        elements.connectionBanner.className = 'connection-banner connecting';
-        elements.connectionBanner.innerHTML = '🟡 Connecting...';
-    } else if (isOnline) {
-        elements.connectionBanner.className = 'connection-banner online';
-        elements.connectionBanner.innerHTML = '🟢 Device Online';
-    } else {
-        elements.connectionBanner.className = 'connection-banner offline';
-        elements.connectionBanner.innerHTML = '🔴 Device Offline';
+    let statusClass = 'connecting';
+    let statusText = 'Connecting...';
+
+    if (connected) {
+        if (isOnline) {
+            statusClass = 'connected';
+            statusText = 'Device Online';
+        } else {
+            statusClass = 'disconnected';
+            statusText = 'Device Offline';
+        }
+    }
+
+    // Update sidebar connection status
+    if (elements.sidebarConnectionStatus) {
+        elements.sidebarConnectionStatus.className = 'sidebar-connection ' + statusClass;
+        elements.sidebarConnectionStatus.textContent = statusText;
+    }
+
+    // Update mobile connection status indicator
+    if (elements.mobileConnectionStatus) {
+        elements.mobileConnectionStatus.className = 'mobile-connection ' + statusClass;
     }
 }
 
@@ -257,17 +266,18 @@ function updateConnectionBanner(connected) {
 function updateStatusUI() {
     if (!deviceStatus) return;
 
-    // Pump running status
-    if (elements.pumpStatus) {
+    // Pump running status indicator
+    if (elements.pumpStatusIndicator) {
         const isRunning = deviceStatus.pumpRunning === true;
-        elements.pumpStatus.innerHTML = isRunning
-            ? '<span class="pump-running">🔄 Running</span>'
-            : '⏹️ Stopped';
+        const iconEl = elements.pumpStatusIndicator.querySelector('.status-indicator-icon');
+        const textEl = elements.pumpStatusIndicator.querySelector('.status-indicator-text');
 
-        // Add animation class to parent
-        const statusItem = elements.pumpStatus.closest('.status-item');
-        if (statusItem) {
-            statusItem.classList.toggle('pump-running', isRunning);
+        if (iconEl) {
+            iconEl.className = 'status-indicator-icon ' + (isRunning ? 'running' : 'stopped');
+            iconEl.textContent = isRunning ? '🔄' : '⏹️';
+        }
+        if (textEl) {
+            textEl.textContent = isRunning ? 'Running' : 'Stopped';
         }
     }
 
@@ -279,7 +289,7 @@ function updateStatusUI() {
     // Direction
     if (elements.direction) {
         const dir = deviceStatus.direction || 'CW';
-        elements.direction.textContent = dir === 'CW' ? '↻ CW' : '↺ CCW';
+        elements.direction.textContent = dir;
     }
 
     // Flow rate
@@ -301,18 +311,16 @@ function updateStatusUI() {
     // Control mode
     if (elements.controlMode) {
         const mode = deviceStatus.controlMode || 'LOCAL';
-        elements.controlMode.innerHTML = mode === 'REMOTE'
-            ? '<span class="badge badge-info">🌐 REMOTE</span>'
-            : '<span class="badge badge-neutral">🏠 LOCAL</span>';
+        elements.controlMode.textContent = mode;
     }
 
     // Last updated
     if (elements.lastUpdated) {
-        elements.lastUpdated.textContent = Utils.formatRelativeTime(deviceStatus.lastUpdated);
+        elements.lastUpdated.textContent = 'Last updated: ' + Utils.formatRelativeTime(deviceStatus.lastUpdated);
     }
 
-    // Update connection banner with online status
-    updateConnectionBanner(FirebaseApp.isConnected());
+    // Update connection status with online status
+    updateConnectionStatus(FirebaseApp.isConnected());
 }
 
 /**
@@ -349,9 +357,9 @@ function updateSettingsUI() {
 
     // Anti-drip
     if (elements.settingsAntiDrip) {
-        elements.settingsAntiDrip.innerHTML = deviceSettings.antiDrip
-            ? '✅ Enabled'
-            : '❌ Disabled';
+        elements.settingsAntiDrip.textContent = deviceSettings.antiDrip
+            ? 'Enabled'
+            : 'Disabled';
     }
 }
 
@@ -364,11 +372,6 @@ function updateInfoUI() {
     // Device name
     if (elements.infoDeviceName) {
         elements.infoDeviceName.textContent = deviceInfo.deviceName || 'Frog Pump';
-    }
-
-    // Update header device name
-    if (elements.deviceName) {
-        elements.deviceName.textContent = deviceInfo.deviceName || 'Frog Pump';
     }
 
     // Device ID
@@ -459,23 +462,22 @@ function updateControlAcknowledgment(control) {
  * Update estimated time for volume dispense
  */
 function updateEstimatedTime() {
-    if (!elements.estimatedTime || !elements.volumeInput || !elements.volumeRpmSlider) return;
+    if (!elements.estimatedTime || !elements.volumeInput) return;
 
+    const volumeRpm = parseInt(elements.volumeRpmInput?.value || elements.volumeRpmSlider?.value) || 100;
     const volume = parseFloat(elements.volumeInput.value) || 0;
-    const rpm = parseInt(elements.volumeRpmSlider.value) || 100;
     const mlPerRev = deviceSettings?.mlPerRev || 0;
 
-    if (volume > 0 && mlPerRev > 0 && rpm > 0) {
-        const seconds = Utils.calculateDispenseTime(volume, mlPerRev, rpm);
-        elements.estimatedTime.innerHTML = `
-            <div class="estimation-value">${Utils.formatDuration(seconds)}</div>
-            <div class="estimation-label">Estimated time (${mlPerRev.toFixed(2)} mL/rev @ ${rpm} RPM)</div>
-        `;
+    const valueEl = elements.estimatedTime.querySelector('.estimation-value');
+    const labelEl = elements.estimatedTime.querySelector('.estimation-label');
+
+    if (volume > 0 && mlPerRev > 0 && volumeRpm > 0) {
+        const seconds = Utils.calculateDispenseTime(volume, mlPerRev, volumeRpm);
+        if (valueEl) valueEl.textContent = Utils.formatDuration(seconds);
+        if (labelEl) labelEl.textContent = `${mlPerRev.toFixed(2)} mL/rev @ ${volumeRpm} RPM`;
     } else {
-        elements.estimatedTime.innerHTML = `
-            <div class="estimation-value">--</div>
-            <div class="estimation-label">Enter volume to calculate</div>
-        `;
+        if (valueEl) valueEl.textContent = '--';
+        if (labelEl) labelEl.textContent = 'Estimated Time';
     }
 }
 
@@ -487,43 +489,14 @@ function updateEstimatedTime() {
  * Setup all event handlers
  */
 function setupEventHandlers() {
-    // RPM Slider
-    if (elements.rpmSlider) {
-        elements.rpmSlider.addEventListener('input', (e) => {
-            const value = e.target.value;
-            if (elements.rpmValue) elements.rpmValue.textContent = value;
-            if (elements.rpmInput) elements.rpmInput.value = value;
-        });
+    // Quick stop button
+    if (elements.quickStopBtn) {
+        elements.quickStopBtn.addEventListener('click', () => stopPump());
     }
 
-    // RPM Input
-    if (elements.rpmInput) {
-        elements.rpmInput.addEventListener('input', (e) => {
-            let value = parseInt(e.target.value) || 0;
-            value = Math.max(0, Math.min(300, value));
-            if (elements.rpmSlider) elements.rpmSlider.value = value;
-            if (elements.rpmValue) elements.rpmValue.textContent = value;
-        });
-    }
-
-    // Direction buttons (RPM mode)
-    if (elements.directionCW) {
-        elements.directionCW.addEventListener('click', () => {
-            elements.directionCW.classList.add('active');
-            if (elements.directionCCW) elements.directionCCW.classList.remove('active');
-        });
-    }
-
-    if (elements.directionCCW) {
-        elements.directionCCW.addEventListener('click', () => {
-            elements.directionCCW.classList.add('active');
-            if (elements.directionCW) elements.directionCW.classList.remove('active');
-        });
-    }
-
-    // Start button
-    if (elements.startBtn) {
-        elements.startBtn.addEventListener('click', () => startPump());
+    // Run button
+    if (elements.runBtn) {
+        elements.runBtn.addEventListener('click', () => startPump());
     }
 
     // Stop button
@@ -531,77 +504,23 @@ function setupEventHandlers() {
         elements.stopBtn.addEventListener('click', () => stopPump());
     }
 
-    // Volume controls
-    if (elements.volumeRpmSlider) {
-        elements.volumeRpmSlider.addEventListener('input', (e) => {
-            if (elements.volumeRpmValue) {
-                elements.volumeRpmValue.textContent = e.target.value;
-            }
-            updateEstimatedTime();
-        });
-    }
-
+    // Volume input change
     if (elements.volumeInput) {
         elements.volumeInput.addEventListener('input', () => {
             updateEstimatedTime();
         });
     }
 
-    // Direction buttons (Volume mode)
-    if (elements.volumeDirectionCW) {
-        elements.volumeDirectionCW.addEventListener('click', () => {
-            elements.volumeDirectionCW.classList.add('active');
-            if (elements.volumeDirectionCCW) elements.volumeDirectionCCW.classList.remove('active');
-        });
-    }
-
-    if (elements.volumeDirectionCCW) {
-        elements.volumeDirectionCCW.addEventListener('click', () => {
-            elements.volumeDirectionCCW.classList.add('active');
-            if (elements.volumeDirectionCW) elements.volumeDirectionCW.classList.remove('active');
+    // Volume RPM input change
+    if (elements.volumeRpmInput) {
+        elements.volumeRpmInput.addEventListener('input', () => {
+            updateEstimatedTime();
         });
     }
 
     // Dispense button
     if (elements.dispenseBtn) {
         elements.dispenseBtn.addEventListener('click', () => dispenseVolume());
-    }
-}
-
-/**
- * Setup tab switching
- */
-function setupTabs() {
-    if (elements.rpmTab) {
-        elements.rpmTab.addEventListener('click', () => {
-            switchTab('rpm');
-        });
-    }
-
-    if (elements.volumeTab) {
-        elements.volumeTab.addEventListener('click', () => {
-            if (!elements.volumeTab.disabled) {
-                switchTab('volume');
-            }
-        });
-    }
-}
-
-/**
- * Switch between control tabs
- * @param {string} tab - 'rpm' or 'volume'
- */
-function switchTab(tab) {
-    if (tab === 'rpm') {
-        elements.rpmTab?.classList.add('active');
-        elements.volumeTab?.classList.remove('active');
-        elements.rpmPanel?.classList.add('active');
-        elements.volumePanel?.classList.remove('active');
-    } else if (tab === 'volume') {
-        elements.volumeTab?.classList.add('active');
-        elements.rpmTab?.classList.remove('active');
-        elements.volumePanel?.classList.add('active');
-        elements.rpmPanel?.classList.remove('active');
     }
 }
 
@@ -615,8 +534,9 @@ function switchTab(tab) {
 async function startPump() {
     if (!currentDeviceId) return;
 
-    const rpm = parseInt(elements.rpmInput?.value || elements.rpmSlider?.value) || 100;
-    const duration = parseInt(elements.durationInput?.value) || 0;
+    const rpm = parseInt(elements.rpmInput?.value) || 100;
+    const onTime = parseInt(elements.onTimeInput?.value) || 0;
+    const offTime = parseInt(elements.offTimeInput?.value) || 0;
     const direction = elements.directionCCW?.classList.contains('active') ? 'CCW' : 'CW';
 
     if (rpm <= 0) {
@@ -631,7 +551,8 @@ async function startPump() {
             command: 'START',
             rpm: rpm,
             direction: direction,
-            duration: duration,
+            onTime: onTime,
+            offTime: offTime,
             targetVolume: 0,
             issuedBy: Auth.getCurrentUserId(),
             issuedAt: Date.now(),
@@ -679,7 +600,7 @@ async function dispenseVolume() {
     if (!currentDeviceId || !isCalibrated) return;
 
     const volume = parseFloat(elements.volumeInput?.value) || 0;
-    const rpm = parseInt(elements.volumeRpmSlider?.value) || 100;
+    const rpm = parseInt(elements.volumeRpmInput?.value || elements.volumeRpmSlider?.value) || 100;
     const direction = elements.volumeDirectionCCW?.classList.contains('active') ? 'CCW' : 'CW';
 
     // Validation
@@ -778,9 +699,6 @@ window.Dashboard = {
     startPump,
     stopPump,
     dispenseVolume,
-
-    // Tab switching
-    switchTab,
 
     // State
     get deviceId() { return currentDeviceId; },

@@ -73,7 +73,7 @@
             </div>
         </aside>
 
-        <!-- Mobile Header (visible on small screens) -->
+        <!-- Mobile Header -->
         <header class="mobile-header">
             <button id="menuToggle" class="mobile-menu-btn">☰</button>
             <div class="mobile-logo">
@@ -86,259 +86,176 @@
         <!-- Mobile Sidebar Overlay -->
         <div id="sidebarOverlay" class="sidebar-overlay"></div>
 
+        <!-- Running Lock Overlay -->
+        <div id="runningLockOverlay" class="running-lock-overlay hidden">
+            <div class="running-lock-content">
+                <div class="running-lock-icon">⚠️</div>
+                <div class="running-lock-text">پمپ در حال اجرا است</div>
+                <div class="running-lock-subtext">برای رفتن به صفحات دیگر ابتدا پمپ را متوقف کنید</div>
+            </div>
+        </div>
+
         <!-- Main Content -->
         <main class="dashboard-main">
-            <!-- Status Page -->
+            <!-- Status Page (Pump Control) -->
             <div id="statusPage" class="dashboard-page active">
                 <div class="page-header">
-                    <h1 class="page-title">Pump Status</h1>
+                    <h1 class="page-title">Pump Control</h1>
                     <span id="lastUpdated" class="page-subtitle">Last updated: --</span>
-                </div>
-
-                <div class="page-content">
-                    <!-- Main Status Card -->
-                    <div class="status-card">
-                        <div class="status-main">
-                            <div class="status-indicator" id="pumpStatusIndicator">
-                                <div class="status-indicator-icon stopped">⏹️</div>
-                                <div class="status-indicator-text">Stopped</div>
-                            </div>
-                            <div class="status-rpm">
-                                <div class="status-rpm-value" id="currentRPM">0</div>
-                                <div class="status-rpm-label">RPM</div>
-                            </div>
-                        </div>
-
-                        <div class="status-details">
-                            <div class="status-detail-item">
-                                <span class="status-detail-label">Direction</span>
-                                <span class="status-detail-value" id="direction">CW</span>
-                            </div>
-                            <div class="status-detail-item">
-                                <span class="status-detail-label">Flow Rate</span>
-                                <span class="status-detail-value" id="flowRate">N/A</span>
-                            </div>
-                            <div class="status-detail-item">
-                                <span class="status-detail-label">Control Mode</span>
-                                <span class="status-detail-value" id="controlMode">LOCAL</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Dispense Statistics -->
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-icon">💧</div>
-                            <div class="stat-content">
-                                <div class="stat-value" id="sessionDispensed">0.0 mL</div>
-                                <div class="stat-label">Session Dispensed</div>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon">📊</div>
-                            <div class="stat-content">
-                                <div class="stat-value" id="totalDispensed">0.000 L</div>
-                                <div class="stat-label">Total Dispensed</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Quick Actions -->
-                    <div class="quick-actions">
-                        <h3 class="section-title">Quick Actions</h3>
-                        <div class="quick-action-buttons">
-                            <button id="quickStopBtn" class="btn btn-danger btn-lg">
-                                🛑 Emergency Stop
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Dispense Page -->
-            <div id="dispensePage" class="dashboard-page">
-                <div class="page-header">
-                    <h1 class="page-title">Dispense Mode</h1>
                 </div>
 
                 <div class="page-content">
                     <!-- Calibration Warning -->
                     <div id="calibrationWarning" class="warning-banner hidden">
                         <span class="warning-icon">⚠️</span>
-                        <span class="warning-text">Calibration required for Volume-Based mode. Please calibrate from device.</span>
-                    </div>
-
-                    <!-- Mode Tabs -->
-                    <div class="mode-tabs">
-                        <button id="rpmTab" class="mode-tab active">RPM-Based</button>
-                        <button id="volumeTab" class="mode-tab">Volume-Based</button>
-                    </div>
-
-                    <!-- RPM-Based Panel -->
-                    <div id="rpmPanel" class="dispense-panel active">
-                        <div class="control-panel">
-                            <!-- RPM Input -->
-                            <div class="control-group">
-                                <label class="control-label">RPM</label>
-                                <div class="control-input-wrapper">
-                                    <input
-                                        type="number"
-                                        id="rpmInput"
-                                        class="control-input"
-                                        min="0"
-                                        max="400"
-                                        value="100"
-                                        placeholder="0-400"
-                                    >
-                                    <span class="control-input-hint">0 - 400</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    id="rpmSlider"
-                                    class="control-slider"
-                                    min="0"
-                                    max="400"
-                                    step="10"
-                                    value="100"
-                                >
-                            </div>
-
-                            <!-- ON Time Input -->
-                            <div class="control-group">
-                                <label class="control-label">ON Time (seconds)</label>
-                                <div class="control-input-wrapper">
-                                    <input
-                                        type="number"
-                                        id="onTimeInput"
-                                        class="control-input"
-                                        min="0"
-                                        value="0"
-                                        placeholder="0 = continuous"
-                                    >
-                                    <span class="control-input-hint">0 = continuous run</span>
-                                </div>
-                            </div>
-
-                            <!-- OFF Time Input -->
-                            <div class="control-group">
-                                <label class="control-label">OFF Time (seconds)</label>
-                                <div class="control-input-wrapper">
-                                    <input
-                                        type="number"
-                                        id="offTimeInput"
-                                        class="control-input"
-                                        min="0"
-                                        value="0"
-                                        placeholder="0 = no pause"
-                                    >
-                                    <span class="control-input-hint">Pause between cycles</span>
-                                </div>
-                            </div>
-
-                            <!-- Direction Toggle -->
-                            <div class="control-group">
-                                <label class="control-label">Direction</label>
-                                <div class="direction-toggle">
-                                    <button type="button" id="directionCW" class="direction-btn active">
-                                        ↻ CW
-                                    </button>
-                                    <button type="button" id="directionCCW" class="direction-btn">
-                                        ↺ CCW
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Run Button -->
-                            <div class="control-actions">
-                                <button id="runBtn" class="btn btn-primary btn-lg btn-full">
-                                    ▶️ Run
-                                </button>
-                                <button id="stopBtn" class="btn btn-outline btn-lg btn-full" style="margin-top: 0.75rem;">
-                                    ⏹️ Stop
-                                </button>
-                            </div>
+                        <div class="warning-content">
+                            <span class="warning-title">Calibration Required</span>
+                            <span class="warning-text">Please calibrate and set Tube ID first to enable Flow control.</span>
                         </div>
                     </div>
 
-                    <!-- Volume-Based Panel -->
-                    <div id="volumePanel" class="dispense-panel">
-                        <div class="control-panel" style="position: relative;">
-                            <!-- Disabled Overlay -->
-                            <div id="volumeOverlay" class="volume-overlay hidden">
-                                <div class="volume-overlay-content">
-                                    <span class="volume-overlay-icon">⚠️</span>
-                                    <span class="volume-overlay-text">Calibration Required</span>
+                    <!-- Pump Control Panel -->
+                    <div class="pump-control-panel">
+                        <div class="control-grid">
+                            <!-- RPM Control -->
+                            <div class="control-section rpm-section">
+                                <div class="control-section-title">RPM</div>
+                                <div class="rpm-control">
+                                    <button type="button" id="rpmMinus" class="rpm-btn rpm-minus" disabled>−</button>
+                                    <input type="number" id="rpmInput" class="rpm-input" value="100" min="0" max="400" disabled>
+                                    <button type="button" id="rpmPlus" class="rpm-btn rpm-plus" disabled>+</button>
+                                </div>
+                                <input type="range" id="rpmSlider" class="rpm-slider" min="0" max="400" step="10" value="100" disabled>
+                                <div class="rpm-range-labels">
+                                    <span>0</span>
+                                    <span>400</span>
                                 </div>
                             </div>
 
-                            <!-- Volume Input -->
-                            <div class="control-group">
-                                <label class="control-label">Target Volume (mL)</label>
-                                <div class="control-input-wrapper">
-                                    <input
-                                        type="number"
-                                        id="volumeInput"
-                                        class="control-input"
-                                        min="0.1"
-                                        max="9999"
-                                        step="0.1"
-                                        placeholder="Enter volume"
-                                    >
+                            <!-- Flow Display -->
+                            <div class="control-section flow-section">
+                                <div class="control-section-title">Flow (ml/min)</div>
+                                <div class="flow-display">
+                                    <span id="flowValue" class="flow-value">--</span>
                                 </div>
                             </div>
 
-                            <!-- Speed (RPM) for Volume Mode -->
-                            <div class="control-group">
-                                <label class="control-label">Speed (RPM)</label>
-                                <div class="control-input-wrapper">
-                                    <input
-                                        type="number"
-                                        id="volumeRpmInput"
-                                        class="control-input"
-                                        min="10"
-                                        max="400"
-                                        value="100"
-                                    >
-                                </div>
-                                <input
-                                    type="range"
-                                    id="volumeRpmSlider"
-                                    class="control-slider"
-                                    min="10"
-                                    max="400"
-                                    step="10"
-                                    value="100"
-                                >
-                            </div>
-
-                            <!-- Direction for Volume Mode -->
-                            <div class="control-group">
-                                <label class="control-label">Direction</label>
-                                <div class="direction-toggle">
-                                    <button type="button" id="volumeDirectionCW" class="direction-btn active">
-                                        ↻ CW
+                            <!-- Direction Control -->
+                            <div class="control-section direction-section">
+                                <div class="control-section-title">Direction</div>
+                                <div class="direction-control">
+                                    <button type="button" id="directionBtn" class="direction-btn-large" disabled>
+                                        <span class="direction-icon">↻</span>
                                     </button>
-                                    <button type="button" id="volumeDirectionCCW" class="direction-btn">
-                                        ↺ CCW
-                                    </button>
+                                    <span id="directionText" class="direction-text-label">ساعتگرد</span>
                                 </div>
                             </div>
 
-                            <!-- Estimated Time -->
-                            <div class="estimation-box" id="estimatedTime">
-                                <div class="estimation-icon">⏱️</div>
-                                <div class="estimation-content">
-                                    <div class="estimation-value">--</div>
-                                    <div class="estimation-label">Estimated Time</div>
+                            <!-- Total Flow Display -->
+                            <div class="control-section total-section">
+                                <div class="control-section-title">Total Flow</div>
+                                <div class="total-flow-display">
+                                    <span id="totalFlowValue" class="total-flow-value">0.00</span>
+                                    <span class="total-flow-unit">mL</span>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Dispense Button -->
-                            <div class="control-actions">
-                                <button id="dispenseBtn" class="btn btn-primary btn-lg btn-full">
-                                    💧 Dispense
+                        <!-- Start/Stop Button -->
+                        <div class="start-stop-container">
+                            <button type="button" id="startStopBtn" class="start-stop-btn start">
+                                <span class="start-stop-icon">▶</span>
+                                <span class="start-stop-text">Start</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Status Info -->
+                    <div class="status-info-panel">
+                        <div class="status-info-row">
+                            <span class="status-info-label">Status</span>
+                            <span id="pumpStatus" class="status-info-value status-stopped">Stopped</span>
+                        </div>
+                        <div class="status-info-row">
+                            <span class="status-info-label">Current RPM</span>
+                            <span id="currentRPM" class="status-info-value">0</span>
+                        </div>
+                        <div class="status-info-row">
+                            <span class="status-info-label">Control Mode</span>
+                            <span id="controlMode" class="status-info-value">LOCAL</span>
+                        </div>
+                        <div class="status-info-row">
+                            <span class="status-info-label">Session Dispensed</span>
+                            <span id="sessionDispensed" class="status-info-value">0.0 mL</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dispense Page (Volume-Based) -->
+            <div id="dispensePage" class="dashboard-page">
+                <div class="page-header">
+                    <h1 class="page-title">Volume Dispense</h1>
+                </div>
+
+                <div class="page-content">
+                    <!-- Calibration Required Warning -->
+                    <div id="dispenseCalibrationWarning" class="warning-banner">
+                        <span class="warning-icon">⚠️</span>
+                        <div class="warning-content">
+                            <span class="warning-title">Calibration Required</span>
+                            <span class="warning-text">Volume-based dispense requires calibration. Please calibrate from device first.</span>
+                        </div>
+                    </div>
+
+                    <!-- Volume Dispense Panel -->
+                    <div id="volumeDispensePanel" class="control-panel hidden">
+                        <!-- Volume Input -->
+                        <div class="control-group">
+                            <label class="control-label">Target Volume (mL)</label>
+                            <div class="control-input-wrapper">
+                                <input type="number" id="volumeInput" class="control-input" min="0.1" max="9999" step="0.1" placeholder="Enter volume">
+                            </div>
+                        </div>
+
+                        <!-- Speed (RPM) -->
+                        <div class="control-group">
+                            <label class="control-label">Speed (RPM)</label>
+                            <div class="control-input-wrapper">
+                                <input type="number" id="volumeRpmInput" class="control-input" min="10" max="400" value="100">
+                            </div>
+                            <input type="range" id="volumeRpmSlider" class="control-slider" min="10" max="400" step="10" value="100">
+                        </div>
+
+                        <!-- Direction -->
+                        <div class="control-group">
+                            <label class="control-label">Direction</label>
+                            <div class="direction-toggle">
+                                <button type="button" id="volumeDirCW" class="direction-toggle-btn active">
+                                    <span>↻</span>
+                                    <span>ساعتگرد</span>
+                                </button>
+                                <button type="button" id="volumeDirCCW" class="direction-toggle-btn">
+                                    <span>↺</span>
+                                    <span>پادساعتگرد</span>
                                 </button>
                             </div>
+                        </div>
+
+                        <!-- Estimated Time -->
+                        <div class="estimation-box" id="estimatedTime">
+                            <div class="estimation-icon">⏱️</div>
+                            <div class="estimation-content">
+                                <div class="estimation-value">--</div>
+                                <div class="estimation-label">Estimated Time</div>
+                            </div>
+                        </div>
+
+                        <!-- Dispense Button -->
+                        <div class="control-actions">
+                            <button id="dispenseBtn" class="btn btn-primary btn-lg btn-full">
+                                💧 Dispense
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -435,85 +352,6 @@
                 .then((reg) => console.log('Service Worker registered:', reg.scope))
                 .catch((err) => console.log('Service Worker registration failed:', err));
         }
-
-        // Sidebar Navigation
-        document.querySelectorAll('.sidebar-nav-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const page = item.dataset.page;
-
-                // Update active nav item
-                document.querySelectorAll('.sidebar-nav-item').forEach(nav => nav.classList.remove('active'));
-                item.classList.add('active');
-
-                // Show selected page
-                document.querySelectorAll('.dashboard-page').forEach(p => p.classList.remove('active'));
-                document.getElementById(page + 'Page').classList.add('active');
-
-                // Close mobile sidebar
-                document.querySelector('.sidebar').classList.remove('open');
-                document.getElementById('sidebarOverlay').classList.remove('active');
-            });
-        });
-
-        // Mobile menu toggle
-        document.getElementById('menuToggle').addEventListener('click', () => {
-            document.querySelector('.sidebar').classList.toggle('open');
-            document.getElementById('sidebarOverlay').classList.toggle('active');
-        });
-
-        // Close sidebar on overlay click
-        document.getElementById('sidebarOverlay').addEventListener('click', () => {
-            document.querySelector('.sidebar').classList.remove('open');
-            document.getElementById('sidebarOverlay').classList.remove('active');
-        });
-
-        // Dispense mode tabs
-        document.getElementById('rpmTab').addEventListener('click', () => {
-            document.getElementById('rpmTab').classList.add('active');
-            document.getElementById('volumeTab').classList.remove('active');
-            document.getElementById('rpmPanel').classList.add('active');
-            document.getElementById('volumePanel').classList.remove('active');
-        });
-
-        document.getElementById('volumeTab').addEventListener('click', () => {
-            document.getElementById('volumeTab').classList.add('active');
-            document.getElementById('rpmTab').classList.remove('active');
-            document.getElementById('volumePanel').classList.add('active');
-            document.getElementById('rpmPanel').classList.remove('active');
-        });
-
-        // RPM slider sync
-        document.getElementById('rpmSlider').addEventListener('input', (e) => {
-            document.getElementById('rpmInput').value = e.target.value;
-        });
-        document.getElementById('rpmInput').addEventListener('input', (e) => {
-            const val = Math.min(400, Math.max(0, parseInt(e.target.value) || 0));
-            document.getElementById('rpmSlider').value = val;
-        });
-
-        // Volume RPM slider sync
-        document.getElementById('volumeRpmSlider').addEventListener('input', (e) => {
-            document.getElementById('volumeRpmInput').value = e.target.value;
-        });
-        document.getElementById('volumeRpmInput').addEventListener('input', (e) => {
-            const val = Math.min(400, Math.max(10, parseInt(e.target.value) || 10));
-            document.getElementById('volumeRpmSlider').value = val;
-        });
-
-        // Direction toggles
-        ['', 'volume'].forEach(prefix => {
-            const cwBtn = document.getElementById(prefix ? prefix + 'DirectionCW' : 'directionCW');
-            const ccwBtn = document.getElementById(prefix ? prefix + 'DirectionCCW' : 'directionCCW');
-
-            cwBtn.addEventListener('click', () => {
-                cwBtn.classList.add('active');
-                ccwBtn.classList.remove('active');
-            });
-            ccwBtn.addEventListener('click', () => {
-                ccwBtn.classList.add('active');
-                cwBtn.classList.remove('active');
-            });
-        });
 
         // Initialize dashboard when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {

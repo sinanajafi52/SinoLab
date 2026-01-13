@@ -1,17 +1,19 @@
 /**
  * SinoLab WebApp - Dashboard Module
- * Real-time monitoring and pump control logic
+ * Real-time pump control and monitoring
  */
 
 // ========================================
-// DASHBOARD STATE
+// STATE
 // ========================================
-
 let currentDeviceId = null;
 let deviceStatus = null;
 let deviceInfo = null;
 let deviceSettings = null;
 let isCalibrated = false;
+let isPumpRunning = false;
+let currentDirection = 'CW'; // CW or CCW
+let targetRPM = 100;
 
 // Firebase listeners
 let statusListener = null;
@@ -20,527 +22,291 @@ let infoListener = null;
 let controlListener = null;
 let connectionListener = null;
 
-// UI Elements cache
-const elements = {};
+// UI Elements
+const el = {};
 
 // ========================================
 // INITIALIZATION
 // ========================================
-
-/**
- * Initialize dashboard page
- */
 function initDashboard() {
     console.log('Initializing dashboard...');
 
-    // Check for device ID
     currentDeviceId = Utils.getSavedDeviceId();
     if (!currentDeviceId) {
         Utils.navigateTo('device.html');
         return;
     }
 
-    // Initialize with auth
     Auth.initProtectedPage(async (user) => {
-        // Cache DOM elements
         cacheElements();
-
-        // Update sidebar with device info
-        updateSidebarDeviceInfo();
-
-        // Setup UI event handlers
         setupEventHandlers();
-
-        // Subscribe to real-time updates
+        setupNavigation();
         subscribeToDevice();
-
-        // Setup connection monitoring
         setupConnectionMonitoring();
-
-        // Setup change device button
         Device.setupChangeDeviceButton();
+
+        // Update sidebar device ID
+        if (el.sidebarDeviceId) {
+            el.sidebarDeviceId.textContent = currentDeviceId;
+        }
+
+        // Enable controls initially (pump is stopped)
+        setControlsEnabled(true);
     });
 }
 
-/**
- * Cache DOM elements for performance
- */
 function cacheElements() {
-    // Sidebar elements
-    elements.sidebarDeviceId = document.getElementById('sidebarDeviceId');
-    elements.sidebarConnectionStatus = document.getElementById('sidebarConnectionStatus');
-    elements.mobileConnectionStatus = document.getElementById('mobileConnectionStatus');
-
-    // Status page elements
-    elements.pumpStatusIndicator = document.getElementById('pumpStatusIndicator');
-    elements.currentRPM = document.getElementById('currentRPM');
-    elements.direction = document.getElementById('direction');
-    elements.flowRate = document.getElementById('flowRate');
-    elements.controlMode = document.getElementById('controlMode');
-    elements.sessionDispensed = document.getElementById('sessionDispensed');
-    elements.totalDispensed = document.getElementById('totalDispensed');
-    elements.lastUpdated = document.getElementById('lastUpdated');
-    elements.quickStopBtn = document.getElementById('quickStopBtn');
-
-    // Calibration warning
-    elements.calibrationWarning = document.getElementById('calibrationWarning');
-
-    // Control tabs
-    elements.rpmTab = document.getElementById('rpmTab');
-    elements.volumeTab = document.getElementById('volumeTab');
-    elements.rpmPanel = document.getElementById('rpmPanel');
-    elements.volumePanel = document.getElementById('volumePanel');
-
-    // RPM controls
-    elements.rpmSlider = document.getElementById('rpmSlider');
-    elements.rpmInput = document.getElementById('rpmInput');
-    elements.onTimeInput = document.getElementById('onTimeInput');
-    elements.offTimeInput = document.getElementById('offTimeInput');
-    elements.directionCW = document.getElementById('directionCW');
-    elements.directionCCW = document.getElementById('directionCCW');
-    elements.runBtn = document.getElementById('runBtn');
-    elements.stopBtn = document.getElementById('stopBtn');
-
-    // Volume controls
-    elements.volumeInput = document.getElementById('volumeInput');
-    elements.volumeRpmSlider = document.getElementById('volumeRpmSlider');
-    elements.volumeRpmInput = document.getElementById('volumeRpmInput');
-    elements.volumeDirectionCW = document.getElementById('volumeDirectionCW');
-    elements.volumeDirectionCCW = document.getElementById('volumeDirectionCCW');
-    elements.dispenseBtn = document.getElementById('dispenseBtn');
-    elements.estimatedTime = document.getElementById('estimatedTime');
-    elements.volumeOverlay = document.getElementById('volumeOverlay');
-
-    // Device info
-    elements.infoDeviceName = document.getElementById('infoDeviceName');
-    elements.infoDeviceId = document.getElementById('infoDeviceId');
-    elements.infoFirmware = document.getElementById('infoFirmware');
-    elements.infoIP = document.getElementById('infoIP');
-    elements.infoMAC = document.getElementById('infoMAC');
-    elements.infoLastSeen = document.getElementById('infoLastSeen');
-    elements.infoRuntime = document.getElementById('infoRuntime');
-
-    // Settings display
-    elements.settingsTube = document.getElementById('settingsTube');
-    elements.settingsMlPerRev = document.getElementById('settingsMlPerRev');
-    elements.settingsCalibrationType = document.getElementById('settingsCalibrationType');
-    elements.settingsLastCalibrated = document.getElementById('settingsLastCalibrated');
-    elements.settingsAntiDrip = document.getElementById('settingsAntiDrip');
-}
-
-// ========================================
-// REAL-TIME SUBSCRIPTIONS
-// ========================================
-
-/**
- * Subscribe to device data updates
- */
-function subscribeToDevice() {
-    if (!currentDeviceId) return;
-
-    const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
-
-    // Subscribe to status
-    statusListener = deviceRef.child('status').on('value', (snapshot) => {
-        deviceStatus = snapshot.val() || {};
-        updateStatusUI();
-        saveStatusForOffline();
-    });
-
-    // Subscribe to settings
-    settingsListener = deviceRef.child('settings').on('value', (snapshot) => {
-        deviceSettings = snapshot.val() || {};
-        updateSettingsUI();
-        checkCalibration();
-    });
-
-    // Subscribe to info
-    infoListener = deviceRef.child('info').on('value', (snapshot) => {
-        deviceInfo = snapshot.val() || {};
-        updateInfoUI();
-    });
-
-    // Subscribe to control acknowledgment
-    controlListener = deviceRef.child('control').on('value', (snapshot) => {
-        const control = snapshot.val() || {};
-        updateControlAcknowledgment(control);
-    });
-
-    console.log('Subscribed to device:', currentDeviceId);
-}
-
-/**
- * Unsubscribe from all device updates
- */
-function unsubscribeFromDevice() {
-    if (!currentDeviceId) return;
-
-    const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
-
-    if (statusListener) {
-        deviceRef.child('status').off('value', statusListener);
-        statusListener = null;
-    }
-
-    if (settingsListener) {
-        deviceRef.child('settings').off('value', settingsListener);
-        settingsListener = null;
-    }
-
-    if (infoListener) {
-        deviceRef.child('info').off('value', infoListener);
-        infoListener = null;
-    }
-
-    if (controlListener) {
-        deviceRef.child('control').off('value', controlListener);
-        controlListener = null;
-    }
-
-    console.log('Unsubscribed from device');
-}
-
-/**
- * Setup Firebase connection monitoring
- */
-function setupConnectionMonitoring() {
-    connectionListener = FirebaseApp.database.ref('.info/connected')
-        .on('value', (snapshot) => {
-            updateConnectionStatus(snapshot.val() === true);
-        });
-
-    // Also listen for custom event
-    window.addEventListener('firebase-connection-change', (e) => {
-        updateConnectionStatus(e.detail.connected);
-    });
-}
-
-// ========================================
-// UI UPDATE FUNCTIONS
-// ========================================
-
-/**
- * Update sidebar device info
- */
-function updateSidebarDeviceInfo() {
-    if (elements.sidebarDeviceId) {
-        elements.sidebarDeviceId.textContent = currentDeviceId;
-    }
-}
-
-/**
- * Update connection status in sidebar and mobile header
- * @param {boolean} connected - Firebase connection status
- */
-function updateConnectionStatus(connected) {
-    const isOnline = deviceStatus?.online === true;
-
-    let statusClass = 'connecting';
-    let statusText = 'Connecting...';
-
-    if (connected) {
-        if (isOnline) {
-            statusClass = 'connected';
-            statusText = 'Device Online';
-        } else {
-            statusClass = 'disconnected';
-            statusText = 'Device Offline';
-        }
-    }
-
-    // Update sidebar connection status
-    if (elements.sidebarConnectionStatus) {
-        elements.sidebarConnectionStatus.className = 'sidebar-connection ' + statusClass;
-        elements.sidebarConnectionStatus.textContent = statusText;
-    }
-
-    // Update mobile connection status indicator
-    if (elements.mobileConnectionStatus) {
-        elements.mobileConnectionStatus.className = 'mobile-connection ' + statusClass;
-    }
-}
-
-/**
- * Update status display
- */
-function updateStatusUI() {
-    if (!deviceStatus) return;
-
-    // Pump running status indicator
-    if (elements.pumpStatusIndicator) {
-        const isRunning = deviceStatus.pumpRunning === true;
-        const iconEl = elements.pumpStatusIndicator.querySelector('.status-indicator-icon');
-        const textEl = elements.pumpStatusIndicator.querySelector('.status-indicator-text');
-
-        if (iconEl) {
-            iconEl.className = 'status-indicator-icon ' + (isRunning ? 'running' : 'stopped');
-            iconEl.textContent = isRunning ? '🔄' : '⏹️';
-        }
-        if (textEl) {
-            textEl.textContent = isRunning ? 'Running' : 'Stopped';
-        }
-    }
-
-    // Current RPM
-    if (elements.currentRPM) {
-        elements.currentRPM.textContent = deviceStatus.currentRPM || 0;
-    }
-
-    // Direction
-    if (elements.direction) {
-        const dir = deviceStatus.direction || 'CW';
-        elements.direction.textContent = dir;
-    }
-
-    // Flow rate
-    if (elements.flowRate) {
-        elements.flowRate.textContent = Utils.formatFlowRate(deviceStatus.flowRate);
-    }
-
-    // Total dispensed
-    if (elements.totalDispensed) {
-        elements.totalDispensed.textContent = Utils.formatVolume(deviceStatus.totalDispensed);
-    }
-
-    // Session dispensed
-    if (elements.sessionDispensed) {
-        const sessionMl = deviceStatus.sessionDispensed || 0;
-        elements.sessionDispensed.textContent = `${sessionMl.toFixed(1)} mL`;
-    }
-
-    // Control mode
-    if (elements.controlMode) {
-        const mode = deviceStatus.controlMode || 'LOCAL';
-        elements.controlMode.textContent = mode;
-    }
-
-    // Last updated
-    if (elements.lastUpdated) {
-        elements.lastUpdated.textContent = 'Last updated: ' + Utils.formatRelativeTime(deviceStatus.lastUpdated);
-    }
-
-    // Update connection status with online status
-    updateConnectionStatus(FirebaseApp.isConnected());
-}
-
-/**
- * Update settings display
- */
-function updateSettingsUI() {
-    if (!deviceSettings) return;
-
-    // Tube size
-    if (elements.settingsTube) {
-        elements.settingsTube.textContent = deviceSettings.tubeName || 'Not set';
-    }
-
-    // ml per rev
-    if (elements.settingsMlPerRev) {
-        const mlPerRev = deviceSettings.mlPerRev;
-        elements.settingsMlPerRev.textContent = mlPerRev
-            ? `${mlPerRev.toFixed(3)} mL/rev`
-            : 'Not calibrated';
-    }
-
-    // Calibration type
-    if (elements.settingsCalibrationType) {
-        const type = deviceSettings.calibrationType || 'None';
-        elements.settingsCalibrationType.textContent =
-            type.charAt(0).toUpperCase() + type.slice(1);
-    }
-
-    // Last calibrated
-    if (elements.settingsLastCalibrated) {
-        elements.settingsLastCalibrated.textContent =
-            Utils.formatDateTime(deviceSettings.lastCalibrated);
-    }
-
-    // Anti-drip
-    if (elements.settingsAntiDrip) {
-        elements.settingsAntiDrip.textContent = deviceSettings.antiDrip
-            ? 'Enabled'
-            : 'Disabled';
-    }
-}
-
-/**
- * Update device info display
- */
-function updateInfoUI() {
-    if (!deviceInfo) return;
-
-    // Device name
-    if (elements.infoDeviceName) {
-        elements.infoDeviceName.textContent = deviceInfo.deviceName || 'Frog Pump';
-    }
-
-    // Device ID
-    if (elements.infoDeviceId) {
-        elements.infoDeviceId.textContent = currentDeviceId;
-    }
-
-    // Firmware
-    if (elements.infoFirmware) {
-        elements.infoFirmware.textContent = deviceInfo.firmware || 'Unknown';
-    }
-
-    // IP Address
-    if (elements.infoIP) {
-        elements.infoIP.textContent = deviceInfo.ip || 'N/A';
-    }
-
-    // MAC Address
-    if (elements.infoMAC) {
-        elements.infoMAC.textContent = deviceInfo.mac || 'N/A';
-    }
-
-    // Last seen
-    if (elements.infoLastSeen) {
-        elements.infoLastSeen.textContent = Utils.formatRelativeTime(deviceInfo.lastSeen);
-    }
-
-    // Total runtime
-    if (elements.infoRuntime) {
-        const hours = deviceInfo.totalWorkingHours || 0;
-        elements.infoRuntime.textContent = `${hours.toFixed(1)} hours`;
-    }
-}
-
-/**
- * Check calibration status and update UI
- */
-function checkCalibration() {
-    const tubeID = deviceSettings?.tubeID || 0;
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
-
-    isCalibrated = (tubeID > 0 && mlPerRev > 0);
-
-    // Show/hide calibration warning
-    if (elements.calibrationWarning) {
-        Utils.toggleElement(elements.calibrationWarning, !isCalibrated);
-    }
-
-    // Enable/disable volume tab
-    if (elements.volumeTab) {
-        elements.volumeTab.disabled = !isCalibrated;
-        elements.volumeTab.classList.toggle('disabled', !isCalibrated);
-    }
-
-    // Show/hide volume overlay
-    if (elements.volumeOverlay) {
-        Utils.toggleElement(elements.volumeOverlay, !isCalibrated);
-    }
-
-    // Disable volume panel inputs if not calibrated
-    if (elements.volumePanel) {
-        const inputs = elements.volumePanel.querySelectorAll('input, button');
-        inputs.forEach(el => {
-            el.disabled = !isCalibrated;
-        });
-    }
-
-    // Update estimated time if calibrated
-    if (isCalibrated) {
-        updateEstimatedTime();
-    }
-}
-
-/**
- * Update control acknowledgment status
- * @param {Object} control - Control data
- */
-function updateControlAcknowledgment(control) {
-    if (!control) return;
-
-    // Could show acknowledgment status or handle command feedback
-    if (control.acknowledged) {
-        console.log('Command acknowledged by device');
-    }
-}
-
-/**
- * Update estimated time for volume dispense
- */
-function updateEstimatedTime() {
-    if (!elements.estimatedTime || !elements.volumeInput) return;
-
-    const volumeRpm = parseInt(elements.volumeRpmInput?.value || elements.volumeRpmSlider?.value) || 100;
-    const volume = parseFloat(elements.volumeInput.value) || 0;
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
-
-    const valueEl = elements.estimatedTime.querySelector('.estimation-value');
-    const labelEl = elements.estimatedTime.querySelector('.estimation-label');
-
-    if (volume > 0 && mlPerRev > 0 && volumeRpm > 0) {
-        const seconds = Utils.calculateDispenseTime(volume, mlPerRev, volumeRpm);
-        if (valueEl) valueEl.textContent = Utils.formatDuration(seconds);
-        if (labelEl) labelEl.textContent = `${mlPerRev.toFixed(2)} mL/rev @ ${volumeRpm} RPM`;
-    } else {
-        if (valueEl) valueEl.textContent = '--';
-        if (labelEl) labelEl.textContent = 'Estimated Time';
-    }
+    // Sidebar
+    el.sidebarDeviceId = document.getElementById('sidebarDeviceId');
+    el.sidebarConnectionStatus = document.getElementById('sidebarConnectionStatus');
+    el.mobileConnectionStatus = document.getElementById('mobileConnectionStatus');
+    el.runningLockOverlay = document.getElementById('runningLockOverlay');
+
+    // Status page - Pump Control
+    el.calibrationWarning = document.getElementById('calibrationWarning');
+    el.rpmMinus = document.getElementById('rpmMinus');
+    el.rpmPlus = document.getElementById('rpmPlus');
+    el.rpmInput = document.getElementById('rpmInput');
+    el.rpmSlider = document.getElementById('rpmSlider');
+    el.flowValue = document.getElementById('flowValue');
+    el.directionBtn = document.getElementById('directionBtn');
+    el.directionText = document.getElementById('directionText');
+    el.totalFlowValue = document.getElementById('totalFlowValue');
+    el.startStopBtn = document.getElementById('startStopBtn');
+    el.lastUpdated = document.getElementById('lastUpdated');
+
+    // Status info panel
+    el.pumpStatus = document.getElementById('pumpStatus');
+    el.currentRPM = document.getElementById('currentRPM');
+    el.controlMode = document.getElementById('controlMode');
+    el.sessionDispensed = document.getElementById('sessionDispensed');
+
+    // Dispense page
+    el.dispenseCalibrationWarning = document.getElementById('dispenseCalibrationWarning');
+    el.volumeDispensePanel = document.getElementById('volumeDispensePanel');
+    el.volumeInput = document.getElementById('volumeInput');
+    el.volumeRpmInput = document.getElementById('volumeRpmInput');
+    el.volumeRpmSlider = document.getElementById('volumeRpmSlider');
+    el.volumeDirCW = document.getElementById('volumeDirCW');
+    el.volumeDirCCW = document.getElementById('volumeDirCCW');
+    el.estimatedTime = document.getElementById('estimatedTime');
+    el.dispenseBtn = document.getElementById('dispenseBtn');
+
+    // System Info
+    el.infoDeviceName = document.getElementById('infoDeviceName');
+    el.infoDeviceId = document.getElementById('infoDeviceId');
+    el.infoFirmware = document.getElementById('infoFirmware');
+    el.infoIP = document.getElementById('infoIP');
+    el.infoMAC = document.getElementById('infoMAC');
+    el.infoLastSeen = document.getElementById('infoLastSeen');
+    el.infoRuntime = document.getElementById('infoRuntime');
+    el.settingsTube = document.getElementById('settingsTube');
+    el.settingsMlPerRev = document.getElementById('settingsMlPerRev');
+    el.settingsCalibrationType = document.getElementById('settingsCalibrationType');
+    el.settingsLastCalibrated = document.getElementById('settingsLastCalibrated');
+    el.settingsAntiDrip = document.getElementById('settingsAntiDrip');
 }
 
 // ========================================
 // EVENT HANDLERS
 // ========================================
-
-/**
- * Setup all event handlers
- */
 function setupEventHandlers() {
-    // Quick stop button
-    if (elements.quickStopBtn) {
-        elements.quickStopBtn.addEventListener('click', () => stopPump());
+    // RPM Controls
+    if (el.rpmMinus) {
+        el.rpmMinus.addEventListener('click', () => adjustRPM(-10));
     }
-
-    // Run button
-    if (elements.runBtn) {
-        elements.runBtn.addEventListener('click', () => startPump());
+    if (el.rpmPlus) {
+        el.rpmPlus.addEventListener('click', () => adjustRPM(10));
     }
-
-    // Stop button
-    if (elements.stopBtn) {
-        elements.stopBtn.addEventListener('click', () => stopPump());
+    if (el.rpmInput) {
+        el.rpmInput.addEventListener('change', (e) => {
+            const val = Math.min(400, Math.max(0, parseInt(e.target.value) || 0));
+            setRPM(val);
+        });
     }
-
-    // Volume input change
-    if (elements.volumeInput) {
-        elements.volumeInput.addEventListener('input', () => {
-            updateEstimatedTime();
+    if (el.rpmSlider) {
+        el.rpmSlider.addEventListener('input', (e) => {
+            setRPM(parseInt(e.target.value));
         });
     }
 
-    // Volume RPM input change
-    if (elements.volumeRpmInput) {
-        elements.volumeRpmInput.addEventListener('input', () => {
+    // Direction button
+    if (el.directionBtn) {
+        el.directionBtn.addEventListener('click', toggleDirection);
+    }
+
+    // Start/Stop button
+    if (el.startStopBtn) {
+        el.startStopBtn.addEventListener('click', togglePump);
+    }
+
+    // Volume Dispense page handlers
+    if (el.volumeRpmSlider) {
+        el.volumeRpmSlider.addEventListener('input', (e) => {
+            if (el.volumeRpmInput) el.volumeRpmInput.value = e.target.value;
             updateEstimatedTime();
         });
     }
-
-    // Dispense button
-    if (elements.dispenseBtn) {
-        elements.dispenseBtn.addEventListener('click', () => dispenseVolume());
+    if (el.volumeRpmInput) {
+        el.volumeRpmInput.addEventListener('change', (e) => {
+            const val = Math.min(400, Math.max(10, parseInt(e.target.value) || 100));
+            e.target.value = val;
+            if (el.volumeRpmSlider) el.volumeRpmSlider.value = val;
+            updateEstimatedTime();
+        });
+    }
+    if (el.volumeInput) {
+        el.volumeInput.addEventListener('input', updateEstimatedTime);
+    }
+    if (el.volumeDirCW) {
+        el.volumeDirCW.addEventListener('click', () => {
+            el.volumeDirCW.classList.add('active');
+            if (el.volumeDirCCW) el.volumeDirCCW.classList.remove('active');
+        });
+    }
+    if (el.volumeDirCCW) {
+        el.volumeDirCCW.addEventListener('click', () => {
+            el.volumeDirCCW.classList.add('active');
+            if (el.volumeDirCW) el.volumeDirCW.classList.remove('active');
+        });
+    }
+    if (el.dispenseBtn) {
+        el.dispenseBtn.addEventListener('click', dispenseVolume);
     }
 }
 
 // ========================================
-// PUMP CONTROL FUNCTIONS
+// NAVIGATION
 // ========================================
+function setupNavigation() {
+    const navItems = document.querySelectorAll('.sidebar-nav-item');
+    const menuToggle = document.getElementById('menuToggle');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const sidebar = document.querySelector('.sidebar');
 
-/**
- * Start pump (RPM mode)
- */
+    navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            // Check if pump is running - block navigation
+            if (isPumpRunning) {
+                showRunningLockMessage();
+                return;
+            }
+
+            const page = item.dataset.page;
+
+            // Update active nav
+            navItems.forEach(nav => nav.classList.remove('active'));
+            item.classList.add('active');
+
+            // Show selected page
+            document.querySelectorAll('.dashboard-page').forEach(p => p.classList.remove('active'));
+            const targetPage = document.getElementById(page + 'Page');
+            if (targetPage) targetPage.classList.add('active');
+
+            // Close mobile sidebar
+            if (sidebar) sidebar.classList.remove('open');
+            if (sidebarOverlay) sidebarOverlay.classList.remove('active');
+        });
+    });
+
+    // Mobile menu
+    if (menuToggle) {
+        menuToggle.addEventListener('click', () => {
+            if (sidebar) sidebar.classList.toggle('open');
+            if (sidebarOverlay) sidebarOverlay.classList.toggle('active');
+        });
+    }
+    if (sidebarOverlay) {
+        sidebarOverlay.addEventListener('click', () => {
+            if (sidebar) sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('active');
+        });
+    }
+}
+
+function showRunningLockMessage() {
+    if (el.runningLockOverlay) {
+        el.runningLockOverlay.classList.remove('hidden');
+        setTimeout(() => {
+            el.runningLockOverlay.classList.add('hidden');
+        }, 2000);
+    }
+}
+
+// ========================================
+// RPM CONTROL
+// ========================================
+function setRPM(value) {
+    targetRPM = Math.min(400, Math.max(0, value));
+
+    if (el.rpmInput) el.rpmInput.value = targetRPM;
+    if (el.rpmSlider) {
+        el.rpmSlider.value = targetRPM;
+        // Update slider background
+        const percent = (targetRPM / 400) * 100;
+        el.rpmSlider.style.setProperty('--slider-percent', percent + '%');
+    }
+
+    updateFlowDisplay();
+}
+
+function adjustRPM(delta) {
+    setRPM(targetRPM + delta);
+}
+
+// ========================================
+// DIRECTION CONTROL
+// ========================================
+function toggleDirection() {
+    currentDirection = currentDirection === 'CW' ? 'CCW' : 'CW';
+    updateDirectionDisplay();
+}
+
+function updateDirectionDisplay() {
+    if (el.directionBtn) {
+        const icon = el.directionBtn.querySelector('.direction-icon');
+        if (icon) {
+            icon.textContent = currentDirection === 'CW' ? '↻' : '↺';
+        }
+    }
+    if (el.directionText) {
+        el.directionText.textContent = currentDirection === 'CW' ? 'ساعتگرد' : 'پادساعتگرد';
+    }
+}
+
+// ========================================
+// FLOW CALCULATION
+// ========================================
+function updateFlowDisplay() {
+    if (!el.flowValue) return;
+
+    const mlPerRev = deviceSettings?.mlPerRev || 0;
+
+    if (mlPerRev > 0 && targetRPM > 0) {
+        // Flow (ml/min) = RPM × mlPerRev
+        const flow = targetRPM * mlPerRev;
+        el.flowValue.textContent = flow.toFixed(2);
+    } else {
+        el.flowValue.textContent = '--';
+    }
+}
+
+// ========================================
+// START/STOP PUMP
+// ========================================
+async function togglePump() {
+    if (isPumpRunning) {
+        await stopPump();
+    } else {
+        await startPump();
+    }
+}
+
 async function startPump() {
     if (!currentDeviceId) return;
 
-    const rpm = parseInt(elements.rpmInput?.value) || 100;
-    const onTime = parseInt(elements.onTimeInput?.value) || 0;
-    const offTime = parseInt(elements.offTimeInput?.value) || 0;
-    const direction = elements.directionCCW?.classList.contains('active') ? 'CCW' : 'CW';
-
-    if (rpm <= 0) {
-        Utils.showWarning('Please set RPM greater than 0');
+    if (targetRPM <= 0) {
+        Utils.showWarning('لطفا RPM را بیشتر از صفر تنظیم کنید');
         return;
     }
 
@@ -549,10 +315,10 @@ async function startPump() {
 
         await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
             command: 'START',
-            rpm: rpm,
-            direction: direction,
-            onTime: onTime,
-            offTime: offTime,
+            rpm: targetRPM,
+            direction: currentDirection,
+            onTime: 0,
+            offTime: 0,
             targetVolume: 0,
             issuedBy: Auth.getCurrentUserId(),
             issuedAt: Date.now(),
@@ -560,7 +326,7 @@ async function startPump() {
         });
 
         Utils.hideLoading();
-        Utils.showSuccess('Start command sent');
+        Utils.showSuccess('Pump started');
     } catch (error) {
         Utils.hideLoading();
         console.error('Error starting pump:', error);
@@ -568,9 +334,6 @@ async function startPump() {
     }
 }
 
-/**
- * Stop pump
- */
 async function stopPump() {
     if (!currentDeviceId) return;
 
@@ -585,7 +348,7 @@ async function stopPump() {
         });
 
         Utils.hideLoading();
-        Utils.showSuccess('Stop command sent');
+        Utils.showSuccess('Pump stopped');
     } catch (error) {
         Utils.hideLoading();
         console.error('Error stopping pump:', error);
@@ -593,17 +356,88 @@ async function stopPump() {
     }
 }
 
-/**
- * Dispense specific volume
- */
+// ========================================
+// PUMP STATE MANAGEMENT
+// ========================================
+function setPumpRunning(running) {
+    isPumpRunning = running;
+
+    // Update Start/Stop button
+    if (el.startStopBtn) {
+        const icon = el.startStopBtn.querySelector('.start-stop-icon');
+        const text = el.startStopBtn.querySelector('.start-stop-text');
+
+        if (running) {
+            el.startStopBtn.classList.remove('start');
+            el.startStopBtn.classList.add('stop');
+            if (icon) icon.textContent = '⏹';
+            if (text) text.textContent = 'Stop';
+        } else {
+            el.startStopBtn.classList.remove('stop');
+            el.startStopBtn.classList.add('start');
+            if (icon) icon.textContent = '▶';
+            if (text) text.textContent = 'Start';
+        }
+    }
+
+    // Update status display
+    if (el.pumpStatus) {
+        if (running) {
+            el.pumpStatus.textContent = 'Running';
+            el.pumpStatus.classList.remove('status-stopped');
+            el.pumpStatus.classList.add('status-running');
+        } else {
+            el.pumpStatus.textContent = 'Stopped';
+            el.pumpStatus.classList.remove('status-running');
+            el.pumpStatus.classList.add('status-stopped');
+        }
+    }
+
+    // Enable/disable controls based on running state
+    setControlsEnabled(!running);
+}
+
+function setControlsEnabled(enabled) {
+    // RPM controls
+    if (el.rpmMinus) el.rpmMinus.disabled = !enabled;
+    if (el.rpmPlus) el.rpmPlus.disabled = !enabled;
+    if (el.rpmInput) el.rpmInput.disabled = !enabled;
+    if (el.rpmSlider) el.rpmSlider.disabled = !enabled;
+
+    // Direction control
+    if (el.directionBtn) el.directionBtn.disabled = !enabled;
+}
+
+// ========================================
+// VOLUME DISPENSE
+// ========================================
+function updateEstimatedTime() {
+    if (!el.estimatedTime) return;
+
+    const volume = parseFloat(el.volumeInput?.value) || 0;
+    const rpm = parseInt(el.volumeRpmInput?.value) || 100;
+    const mlPerRev = deviceSettings?.mlPerRev || 0;
+
+    const valueEl = el.estimatedTime.querySelector('.estimation-value');
+    const labelEl = el.estimatedTime.querySelector('.estimation-label');
+
+    if (volume > 0 && mlPerRev > 0 && rpm > 0) {
+        const seconds = Utils.calculateDispenseTime(volume, mlPerRev, rpm);
+        if (valueEl) valueEl.textContent = Utils.formatDuration(seconds);
+        if (labelEl) labelEl.textContent = `${mlPerRev.toFixed(2)} mL/rev @ ${rpm} RPM`;
+    } else {
+        if (valueEl) valueEl.textContent = '--';
+        if (labelEl) labelEl.textContent = 'Estimated Time';
+    }
+}
+
 async function dispenseVolume() {
-    if (!currentDeviceId || !isCalibrated) return;
+    if (!currentDeviceId || !isCalibrated || isPumpRunning) return;
 
-    const volume = parseFloat(elements.volumeInput?.value) || 0;
-    const rpm = parseInt(elements.volumeRpmInput?.value || elements.volumeRpmSlider?.value) || 100;
-    const direction = elements.volumeDirectionCCW?.classList.contains('active') ? 'CCW' : 'CW';
+    const volume = parseFloat(el.volumeInput?.value) || 0;
+    const rpm = parseInt(el.volumeRpmInput?.value) || 100;
+    const direction = el.volumeDirCCW?.classList.contains('active') ? 'CCW' : 'CW';
 
-    // Validation
     if (volume <= 0 || volume > 9999) {
         Utils.showWarning('Volume must be between 0.1 and 9999 mL');
         return;
@@ -633,55 +467,195 @@ async function dispenseVolume() {
 }
 
 // ========================================
-// OFFLINE SUPPORT
+// FIREBASE SUBSCRIPTIONS
 // ========================================
+function subscribeToDevice() {
+    if (!currentDeviceId) return;
 
-/**
- * Save current status for offline viewing
- */
-function saveStatusForOffline() {
-    if (deviceStatus) {
-        Utils.saveLastStatus({
-            deviceId: currentDeviceId,
-            status: deviceStatus,
-            info: deviceInfo,
-            settings: deviceSettings
+    const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
+
+    // Status updates
+    statusListener = deviceRef.child('status').on('value', (snapshot) => {
+        deviceStatus = snapshot.val() || {};
+        updateStatusUI();
+    });
+
+    // Settings updates
+    settingsListener = deviceRef.child('settings').on('value', (snapshot) => {
+        deviceSettings = snapshot.val() || {};
+        updateSettingsUI();
+        checkCalibration();
+    });
+
+    // Info updates
+    infoListener = deviceRef.child('info').on('value', (snapshot) => {
+        deviceInfo = snapshot.val() || {};
+        updateInfoUI();
+    });
+
+    console.log('Subscribed to device:', currentDeviceId);
+}
+
+function setupConnectionMonitoring() {
+    connectionListener = FirebaseApp.database.ref('.info/connected')
+        .on('value', (snapshot) => {
+            updateConnectionStatus(snapshot.val() === true);
         });
+}
+
+// ========================================
+// UI UPDATES
+// ========================================
+function updateStatusUI() {
+    if (!deviceStatus) return;
+
+    // Update pump running state
+    const running = deviceStatus.pumpRunning === true;
+    setPumpRunning(running);
+
+    // Current RPM display
+    if (el.currentRPM) {
+        el.currentRPM.textContent = deviceStatus.currentRPM || 0;
+    }
+
+    // Control mode
+    if (el.controlMode) {
+        el.controlMode.textContent = deviceStatus.controlMode || 'LOCAL';
+    }
+
+    // Session dispensed
+    if (el.sessionDispensed) {
+        const sessionMl = deviceStatus.sessionDispensed || 0;
+        el.sessionDispensed.textContent = `${sessionMl.toFixed(1)} mL`;
+    }
+
+    // Total flow
+    if (el.totalFlowValue) {
+        const total = deviceStatus.totalDispensed || 0;
+        el.totalFlowValue.textContent = total.toFixed(2);
+    }
+
+    // Last updated
+    if (el.lastUpdated) {
+        el.lastUpdated.textContent = 'Last updated: ' + Utils.formatRelativeTime(deviceStatus.lastUpdated);
+    }
+
+    // Update connection status
+    updateConnectionStatus(FirebaseApp.isConnected());
+}
+
+function updateSettingsUI() {
+    if (!deviceSettings) return;
+
+    if (el.settingsTube) {
+        el.settingsTube.textContent = deviceSettings.tubeName || 'Not set';
+    }
+    if (el.settingsMlPerRev) {
+        const mlPerRev = deviceSettings.mlPerRev;
+        el.settingsMlPerRev.textContent = mlPerRev ? `${mlPerRev.toFixed(3)} mL/rev` : 'Not calibrated';
+    }
+    if (el.settingsCalibrationType) {
+        const type = deviceSettings.calibrationType || 'None';
+        el.settingsCalibrationType.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+    }
+    if (el.settingsLastCalibrated) {
+        el.settingsLastCalibrated.textContent = Utils.formatDateTime(deviceSettings.lastCalibrated);
+    }
+    if (el.settingsAntiDrip) {
+        el.settingsAntiDrip.textContent = deviceSettings.antiDrip ? 'Enabled' : 'Disabled';
+    }
+
+    // Update flow display when settings change
+    updateFlowDisplay();
+}
+
+function updateInfoUI() {
+    if (!deviceInfo) return;
+
+    if (el.infoDeviceName) el.infoDeviceName.textContent = deviceInfo.deviceName || 'Frog Pump';
+    if (el.infoDeviceId) el.infoDeviceId.textContent = currentDeviceId;
+    if (el.infoFirmware) el.infoFirmware.textContent = deviceInfo.firmware || 'Unknown';
+    if (el.infoIP) el.infoIP.textContent = deviceInfo.ip || 'N/A';
+    if (el.infoMAC) el.infoMAC.textContent = deviceInfo.mac || 'N/A';
+    if (el.infoLastSeen) el.infoLastSeen.textContent = Utils.formatRelativeTime(deviceInfo.lastSeen);
+    if (el.infoRuntime) {
+        const hours = deviceInfo.totalWorkingHours || 0;
+        el.infoRuntime.textContent = `${hours.toFixed(1)} hours`;
     }
 }
 
-/**
- * Load saved status for offline display
- */
-function loadOfflineStatus() {
-    const saved = Utils.getLastStatus();
-    if (saved && saved.deviceId === currentDeviceId) {
-        deviceStatus = saved.status;
-        deviceInfo = saved.info;
-        deviceSettings = saved.settings;
+function checkCalibration() {
+    const tubeID = deviceSettings?.tubeID || 0;
+    const mlPerRev = deviceSettings?.mlPerRev || 0;
 
-        updateStatusUI();
-        updateInfoUI();
-        updateSettingsUI();
-        checkCalibration();
+    isCalibrated = (tubeID > 0 && mlPerRev > 0);
 
-        Utils.showWarning('Showing last saved data (offline)');
+    // Status page warning
+    if (el.calibrationWarning) {
+        if (isCalibrated) {
+            el.calibrationWarning.classList.add('hidden');
+        } else {
+            el.calibrationWarning.classList.remove('hidden');
+        }
+    }
+
+    // Dispense page
+    if (el.dispenseCalibrationWarning) {
+        if (isCalibrated) {
+            el.dispenseCalibrationWarning.classList.add('hidden');
+        } else {
+            el.dispenseCalibrationWarning.classList.remove('hidden');
+        }
+    }
+    if (el.volumeDispensePanel) {
+        if (isCalibrated) {
+            el.volumeDispensePanel.classList.remove('hidden');
+        } else {
+            el.volumeDispensePanel.classList.add('hidden');
+        }
+    }
+
+    updateEstimatedTime();
+}
+
+function updateConnectionStatus(connected) {
+    const isOnline = deviceStatus?.online === true;
+
+    let statusClass = 'connecting';
+    let statusText = 'Connecting...';
+
+    if (connected) {
+        if (isOnline) {
+            statusClass = 'connected';
+            statusText = 'Device Online';
+        } else {
+            statusClass = 'disconnected';
+            statusText = 'Device Offline';
+        }
+    }
+
+    if (el.sidebarConnectionStatus) {
+        el.sidebarConnectionStatus.className = 'sidebar-connection ' + statusClass;
+        el.sidebarConnectionStatus.textContent = statusText;
+    }
+
+    if (el.mobileConnectionStatus) {
+        el.mobileConnectionStatus.className = 'mobile-connection ' + statusClass;
     }
 }
 
 // ========================================
 // CLEANUP
 // ========================================
-
-/**
- * Cleanup on page unload
- */
 function cleanup() {
-    unsubscribeFromDevice();
+    if (!currentDeviceId) return;
+    const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
 
+    if (statusListener) deviceRef.child('status').off('value', statusListener);
+    if (settingsListener) deviceRef.child('settings').off('value', settingsListener);
+    if (infoListener) deviceRef.child('info').off('value', infoListener);
     if (connectionListener) {
         FirebaseApp.database.ref('.info/connected').off('value', connectionListener);
-        connectionListener = null;
     }
 }
 
@@ -690,24 +664,15 @@ window.addEventListener('beforeunload', cleanup);
 // ========================================
 // EXPORT
 // ========================================
-
 window.Dashboard = {
-    // Initialization
     initDashboard,
-
-    // Control functions
     startPump,
     stopPump,
-    dispenseVolume,
-
-    // State
+    togglePump,
     get deviceId() { return currentDeviceId; },
     get status() { return deviceStatus; },
-    get info() { return deviceInfo; },
-    get settings() { return deviceSettings; },
+    get isRunning() { return isPumpRunning; },
     get isCalibrated() { return isCalibrated; },
-
-    // Cleanup
     cleanup
 };
 

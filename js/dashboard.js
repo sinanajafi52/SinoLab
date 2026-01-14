@@ -12,6 +12,7 @@ let deviceInfo = null;
 let deviceSettings = null;
 let isCalibrated = false;
 let isPumpRunning = false;
+let isDeviceOnline = false;
 let currentDirection = 'CW'; // CW or CCW
 let targetRPM = 100;
 let dispenseMode = 'rpm'; // 'rpm' or 'volume'
@@ -115,7 +116,12 @@ function cacheElements() {
     el.estimatedTime = document.getElementById('estimatedTime');
     el.volumeDispenseBtn = document.getElementById('volumeDispenseBtn');
 
-    // System Info
+    // System Info - Session Stats
+    el.infoSessionVolume = document.getElementById('infoSessionVolume');
+    el.infoTotalDispensed = document.getElementById('infoTotalDispensed');
+    el.preFlushBtn = document.getElementById('preFlushBtn');
+
+    // System Info - Device
     el.infoDeviceName = document.getElementById('infoDeviceName');
     el.infoDeviceId = document.getElementById('infoDeviceId');
     el.infoFirmware = document.getElementById('infoFirmware');
@@ -123,6 +129,8 @@ function cacheElements() {
     el.infoMAC = document.getElementById('infoMAC');
     el.infoLastSeen = document.getElementById('infoLastSeen');
     el.infoRuntime = document.getElementById('infoRuntime');
+
+    // System Info - Calibration
     el.settingsTube = document.getElementById('settingsTube');
     el.settingsMlPerRev = document.getElementById('settingsMlPerRev');
     el.settingsCalibrationType = document.getElementById('settingsCalibrationType');
@@ -282,6 +290,11 @@ function setupEventHandlers() {
     }
     if (el.volumeDispenseBtn) {
         el.volumeDispenseBtn.addEventListener('click', dispenseVolume);
+    }
+
+    // Pre-Flush button
+    if (el.preFlushBtn) {
+        el.preFlushBtn.addEventListener('click', preFlush);
     }
 }
 
@@ -541,6 +554,41 @@ function setControlsEnabled(enabled) {
     if (el.directionBtn) el.directionBtn.disabled = !enabled;
 }
 
+/**
+ * Update controls state based on device online status and calibration
+ */
+function updateControlsState() {
+    const canControl = isDeviceOnline && !isPumpRunning;
+
+    // Start/Stop button - requires device to be online
+    if (el.startStopBtn) {
+        el.startStopBtn.disabled = !isDeviceOnline;
+    }
+
+    // Pre-Flush button - requires device to be online
+    if (el.preFlushBtn) {
+        el.preFlushBtn.disabled = !isDeviceOnline || isPumpRunning;
+    }
+
+    // Dispense buttons - require device to be online
+    if (el.rpmDispenseBtn) {
+        el.rpmDispenseBtn.disabled = !isDeviceOnline || isPumpRunning;
+    }
+    if (el.volumeDispenseBtn) {
+        // Volume dispense also requires calibration
+        el.volumeDispenseBtn.disabled = !isDeviceOnline || isPumpRunning || !isCalibrated;
+    }
+
+    // Update calibration warning visibility
+    if (el.calibWarning) {
+        if (!isCalibrated) {
+            el.calibWarning.classList.remove('hidden');
+        } else {
+            el.calibWarning.classList.add('hidden');
+        }
+    }
+}
+
 // ========================================
 // RPM-BASED DISPENSE
 // ========================================
@@ -702,6 +750,50 @@ async function dispenseVolume() {
 }
 
 // ========================================
+// PRE-FLUSH
+// ========================================
+async function preFlush() {
+    if (!currentDeviceId || isPumpRunning) {
+        if (isPumpRunning) {
+            Utils.showWarning('Pump is already running');
+        }
+        return;
+    }
+
+    // Check if device is online
+    if (!isDeviceOnline) {
+        Utils.showWarning('Device is offline');
+        return;
+    }
+
+    try {
+        Utils.showLoading('Starting pre-flush...');
+
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
+            command: 'PRE_FLUSH',
+            rpm: 200,           // Default pre-flush speed
+            direction: 'CW',    // Default direction
+            onTime: 3000,       // 3 seconds
+            offTime: 0,
+            targetVolume: 0,
+            issuedBy: Auth.getCurrentUserId(),
+            issuedAt: Date.now(),
+            acknowledged: false
+        });
+
+        // Optimistic UI update
+        setPumpRunning(true);
+
+        Utils.hideLoading();
+        Utils.showSuccess('Pre-flush started');
+    } catch (error) {
+        Utils.hideLoading();
+        console.error('Error starting pre-flush:', error);
+        Utils.showError('Failed to start pre-flush');
+    }
+}
+
+// ========================================
 // FIREBASE SUBSCRIPTIONS
 // ========================================
 function subscribeToDevice() {
@@ -744,6 +836,9 @@ function setupConnectionMonitoring() {
 function updateStatusUI() {
     if (!deviceStatus) return;
 
+    // Update device online state
+    isDeviceOnline = deviceStatus.online === true;
+
     // Update pump running state from device
     const running = deviceStatus.pumpRunning === true;
     setPumpRunning(running);
@@ -758,16 +853,24 @@ function updateStatusUI() {
         el.controlMode.textContent = deviceStatus.controlMode || 'LOCAL';
     }
 
-    // Session dispensed
+    // Session dispensed (show 0 if device resets it)
+    const sessionMl = deviceStatus.sessionDispensed || 0;
     if (el.sessionDispensed) {
-        const sessionMl = deviceStatus.sessionDispensed || 0;
         el.sessionDispensed.textContent = `${sessionMl.toFixed(1)} mL`;
+    }
+    // Also update in System Info page
+    if (el.infoSessionVolume) {
+        el.infoSessionVolume.textContent = `${sessionMl.toFixed(2)} mL`;
     }
 
     // Total flow
+    const totalMl = deviceStatus.totalDispensed || 0;
     if (el.totalFlowValue) {
-        const total = deviceStatus.totalDispensed || 0;
-        el.totalFlowValue.textContent = total.toFixed(2);
+        el.totalFlowValue.textContent = totalMl.toFixed(2);
+    }
+    // Also update in System Info page
+    if (el.infoTotalDispensed) {
+        el.infoTotalDispensed.textContent = `${totalMl.toFixed(2)} mL`;
     }
 
     // Last updated
@@ -775,27 +878,60 @@ function updateStatusUI() {
         el.lastUpdated.textContent = 'Last updated: ' + Utils.formatRelativeTime(deviceStatus.lastUpdated);
     }
 
-    // Update connection status
+    // Update connection status and controls
     updateConnectionStatus(FirebaseApp.isConnected());
+    updateControlsState();
 }
 
 function updateSettingsUI() {
     if (!deviceSettings) return;
 
+    // Tube Size - never show -1
     if (el.settingsTube) {
-        el.settingsTube.textContent = deviceSettings.tubeName || 'Not set';
+        const tubeID = deviceSettings.tubeID;
+        const tubeName = deviceSettings.tubeName;
+        if (tubeID && tubeID > 0 && tubeName) {
+            el.settingsTube.textContent = tubeName;
+            el.settingsTube.classList.remove('warning');
+        } else {
+            el.settingsTube.textContent = 'Not set';
+            el.settingsTube.classList.add('warning');
+        }
     }
+
+    // Calibration Value - never show -1 or negative values
     if (el.settingsMlPerRev) {
         const mlPerRev = deviceSettings.mlPerRev;
-        el.settingsMlPerRev.textContent = mlPerRev ? `${mlPerRev.toFixed(3)} mL/rev` : 'Not calibrated';
+        if (mlPerRev && mlPerRev > 0) {
+            el.settingsMlPerRev.textContent = `${mlPerRev.toFixed(3)} mL/rev`;
+            el.settingsMlPerRev.classList.remove('warning');
+        } else {
+            el.settingsMlPerRev.textContent = 'Not calibrated';
+            el.settingsMlPerRev.classList.add('warning');
+        }
     }
+
+    // Calibration Type
     if (el.settingsCalibrationType) {
-        const type = deviceSettings.calibrationType || 'None';
-        el.settingsCalibrationType.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+        const type = deviceSettings.calibrationType;
+        if (type && type !== 'none') {
+            el.settingsCalibrationType.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+        } else {
+            el.settingsCalibrationType.textContent = 'None';
+        }
     }
+
+    // Last Calibrated
     if (el.settingsLastCalibrated) {
-        el.settingsLastCalibrated.textContent = Utils.formatDateTime(deviceSettings.lastCalibrated);
+        const lastCal = deviceSettings.lastCalibrated;
+        if (lastCal && lastCal > 0) {
+            el.settingsLastCalibrated.textContent = Utils.formatDateTime(lastCal);
+        } else {
+            el.settingsLastCalibrated.textContent = 'Never';
+        }
     }
+
+    // Anti-Drip
     if (el.settingsAntiDrip) {
         el.settingsAntiDrip.textContent = deviceSettings.antiDrip ? 'Enabled' : 'Disabled';
     }
@@ -803,6 +939,7 @@ function updateSettingsUI() {
     // Update flow display when settings change
     updateFlowDisplay();
     updateMaxVolume();
+    updateControlsState();
 }
 
 function updateInfoUI() {

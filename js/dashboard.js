@@ -75,6 +75,7 @@ function cacheElements() {
     el.rpmSlider = document.getElementById('rpmSlider');
     el.flowDisplayBox = document.getElementById('flowDisplayBox');
     el.flowValue = document.getElementById('flowValue');
+    el.flowInput = document.getElementById('flowInput');
     el.directionBtn = document.getElementById('directionBtn');
     el.directionArrow = document.getElementById('directionArrow');
     el.directionLabel = document.getElementById('directionLabel');
@@ -106,10 +107,8 @@ function cacheElements() {
     el.dispenseRpmDirCCW = document.getElementById('dispenseRpmDirCCW');
     el.rpmDispenseBtn = document.getElementById('rpmDispenseBtn');
 
-    // Volume-based dispense
+    // Volume-based dispense (no RPM control - auto calculated)
     el.volumeInput = document.getElementById('volumeInput');
-    el.volumeRpmInput = document.getElementById('volumeRpmInput');
-    el.volumeRpmSlider = document.getElementById('volumeRpmSlider');
     el.volumeOffTime = document.getElementById('volumeOffTime');
     el.volumeDirCW = document.getElementById('volumeDirCW');
     el.volumeDirCCW = document.getElementById('volumeDirCCW');
@@ -247,26 +246,26 @@ function setupEventHandlers() {
         el.rpmDispenseBtn.addEventListener('click', dispenseRpmBased);
     }
 
-    // Volume-based dispense handlers
-    if (el.volumeRpmSlider) {
-        el.volumeRpmSlider.addEventListener('input', (e) => {
-            if (el.volumeRpmInput) el.volumeRpmInput.value = e.target.value;
-            updateEstimatedTime();
-            updateMaxVolume();
+    // Flow input handler (when calibrated, user can edit flow to set RPM)
+    if (el.flowInput) {
+        el.flowInput.addEventListener('input', (e) => {
+            const flow = parseFloat(e.target.value) || 0;
+            const mlPerRev = deviceSettings?.mlPerRev || 0;
+            if (mlPerRev > 0 && flow > 0) {
+                // RPM = Flow / mlPerRev
+                const rpm = Math.min(400, Math.max(0, Math.round(flow / mlPerRev)));
+                setRPM(rpm);
+            }
+        });
+        el.flowInput.addEventListener('blur', () => {
+            // Update display when leaving input
+            updateFlowDisplay();
         });
     }
-    if (el.volumeRpmInput) {
-        el.volumeRpmInput.addEventListener('change', (e) => {
-            const val = Math.min(400, Math.max(10, parseInt(e.target.value) || 100));
-            e.target.value = val;
-            if (el.volumeRpmSlider) el.volumeRpmSlider.value = val;
-            updateEstimatedTime();
-            updateMaxVolume();
-        });
-    }
+
+    // Volume-based dispense handlers (no RPM control - auto calculated)
     if (el.volumeInput) {
         el.volumeInput.addEventListener('input', () => {
-            enforceVolumeLimit();
             updateEstimatedTime();
         });
     }
@@ -421,16 +420,26 @@ function updateDirectionDisplay() {
 // FLOW CALCULATION
 // ========================================
 function updateFlowDisplay() {
-    if (!el.flowValue) return;
-
     const mlPerRev = deviceSettings?.mlPerRev || 0;
+    const flow = (mlPerRev > 0 && targetRPM > 0) ? targetRPM * mlPerRev : 0;
 
-    if (mlPerRev > 0 && targetRPM > 0) {
-        // Flow (ml/min) = RPM × mlPerRev
-        const flow = targetRPM * mlPerRev;
-        el.flowValue.textContent = flow.toFixed(2);
-    } else {
-        el.flowValue.textContent = '--';
+    // Update flow display value
+    if (el.flowValue) {
+        el.flowValue.textContent = flow > 0 ? flow.toFixed(2) : '--';
+    }
+
+    // Update flow input value
+    if (el.flowInput) {
+        el.flowInput.value = flow > 0 ? flow.toFixed(2) : '';
+    }
+
+    // Toggle editable mode based on calibration
+    if (el.flowDisplayBox) {
+        if (isCalibrated) {
+            el.flowDisplayBox.classList.add('editable');
+        } else {
+            el.flowDisplayBox.classList.remove('editable');
+        }
     }
 }
 
@@ -447,16 +456,20 @@ async function togglePump() {
 }
 
 async function startPump() {
-    if (!currentDeviceId) return;
+    if (!currentDeviceId) {
+        Utils.showWarning('No device connected');
+        return;
+    }
 
     if (targetRPM <= 0) {
         Utils.showWarning('Please set RPM higher than 0');
         return;
     }
 
-    try {
-        Utils.showLoading('Starting pump...');
+    // Optimistic UI update first for responsiveness
+    setPumpRunning(true);
 
+    try {
         await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
             command: 'START',
             rpm: targetRPM,
@@ -469,24 +482,22 @@ async function startPump() {
             acknowledged: false
         });
 
-        // Optimistic UI update
-        setPumpRunning(true);
-
-        Utils.hideLoading();
         Utils.showSuccess('Pump started');
     } catch (error) {
-        Utils.hideLoading();
         console.error('Error starting pump:', error);
-        Utils.showError('Failed to start pump');
+        // Revert UI on error
+        setPumpRunning(false);
+        Utils.showError('Failed to start pump. Check connection.');
     }
 }
 
 async function stopPump() {
     if (!currentDeviceId) return;
 
-    try {
-        Utils.showLoading('Stopping pump...');
+    // Optimistic UI update first
+    setPumpRunning(false);
 
+    try {
         await FirebaseApp.getDeviceRef(currentDeviceId).child('control').update({
             command: 'STOP',
             issuedBy: Auth.getCurrentUserId(),
@@ -494,15 +505,12 @@ async function stopPump() {
             acknowledged: false
         });
 
-        // Optimistic UI update
-        setPumpRunning(false);
-
-        Utils.hideLoading();
         Utils.showSuccess('Pump stopped');
     } catch (error) {
-        Utils.hideLoading();
         console.error('Error stopping pump:', error);
-        Utils.showError('Failed to stop pump');
+        // Revert UI on error
+        setPumpRunning(true);
+        Utils.showError('Failed to stop pump. Check connection.');
     }
 }
 
@@ -544,7 +552,7 @@ function setPumpRunning(running) {
 }
 
 function setControlsEnabled(enabled) {
-    // RPM controls
+    // RPM controls - always allow UI interaction, check online when sending command
     if (el.rpmMinus) el.rpmMinus.disabled = !enabled;
     if (el.rpmPlus) el.rpmPlus.disabled = !enabled;
     if (el.rpmInput) el.rpmInput.disabled = !enabled;
@@ -552,31 +560,30 @@ function setControlsEnabled(enabled) {
 
     // Direction control
     if (el.directionBtn) el.directionBtn.disabled = !enabled;
+
+    // Start/Stop button - enabled unless pump is running
+    // Online check happens when button is clicked
+    if (el.startStopBtn) {
+        el.startStopBtn.disabled = false; // Always clickable
+    }
 }
 
 /**
  * Update controls state based on device online status and calibration
  */
 function updateControlsState() {
-    const canControl = isDeviceOnline && !isPumpRunning;
-
-    // Start/Stop button - requires device to be online
-    if (el.startStopBtn) {
-        el.startStopBtn.disabled = !isDeviceOnline;
-    }
-
-    // Pre-Flush button - requires device to be online
+    // Pre-Flush button - show warning on click if offline
     if (el.preFlushBtn) {
-        el.preFlushBtn.disabled = !isDeviceOnline || isPumpRunning;
+        el.preFlushBtn.disabled = isPumpRunning;
     }
 
-    // Dispense buttons - require device to be online
+    // Dispense buttons
     if (el.rpmDispenseBtn) {
-        el.rpmDispenseBtn.disabled = !isDeviceOnline || isPumpRunning;
+        el.rpmDispenseBtn.disabled = isPumpRunning;
     }
     if (el.volumeDispenseBtn) {
-        // Volume dispense also requires calibration
-        el.volumeDispenseBtn.disabled = !isDeviceOnline || isPumpRunning || !isCalibrated;
+        // Volume dispense requires calibration
+        el.volumeDispenseBtn.disabled = isPumpRunning || !isCalibrated;
     }
 
     // Update calibration warning visibility
@@ -645,20 +652,22 @@ async function dispenseRpmBased() {
 // ========================================
 // VOLUME-BASED DISPENSE
 // ========================================
+// Default RPM for volume-based dispense (auto-calculated from calibration)
+const VOLUME_DISPENSE_RPM = 200;
+
 function updateEstimatedTime() {
     if (!el.estimatedTime) return;
 
     const volume = parseFloat(el.volumeInput?.value) || 0;
-    const rpm = parseInt(el.volumeRpmInput?.value) || 100;
     const mlPerRev = deviceSettings?.mlPerRev || 0;
 
     const valueEl = el.estimatedTime.querySelector('.estimation-value');
     const labelEl = el.estimatedTime.querySelector('.estimation-label');
 
-    if (volume > 0 && mlPerRev > 0 && rpm > 0) {
-        const seconds = Utils.calculateDispenseTime(volume, mlPerRev, rpm);
+    if (volume > 0 && mlPerRev > 0) {
+        const seconds = Utils.calculateDispenseTime(volume, mlPerRev, VOLUME_DISPENSE_RPM);
         if (valueEl) valueEl.textContent = Utils.formatDuration(seconds);
-        if (labelEl) labelEl.textContent = `${mlPerRev.toFixed(2)} mL/rev @ ${rpm} RPM`;
+        if (labelEl) labelEl.textContent = `${mlPerRev.toFixed(2)} mL/rev @ ${VOLUME_DISPENSE_RPM} RPM`;
     } else {
         if (valueEl) valueEl.textContent = '--';
         if (labelEl) labelEl.textContent = 'Estimated Time';
@@ -677,33 +686,23 @@ function updateMaxVolume() {
     }
 }
 
-function enforceVolumeLimit() {
-    if (!el.volumeInput || !el.volumeRpmInput) return;
-
-    const volume = parseFloat(el.volumeInput.value) || 0;
-    const rpm = parseInt(el.volumeRpmInput.value) || 100;
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
-
-    if (volume > 0 && mlPerRev > 0) {
-        // Calculate required RPM for this volume
-        // volume = rpm * mlPerRev * time(min)
-        // We want to ensure rpm doesn't exceed 400
-        // Max volume that can be dispensed at current RPM in reasonable time
-        const flowPerMin = rpm * mlPerRev;
-        // If volume would require more than 400 RPM for 1 minute dispense, limit it
-        const maxVolumeAt400 = 400 * mlPerRev * 60; // 60 minutes at max speed
-
-        if (volume > maxVolumeAt400) {
-            el.volumeInput.value = maxVolumeAt400.toFixed(1);
-        }
-    }
-}
-
 async function dispenseVolume() {
-    if (!currentDeviceId || !isCalibrated || isPumpRunning) return;
+    if (!currentDeviceId) {
+        Utils.showWarning('No device connected');
+        return;
+    }
+
+    if (!isCalibrated) {
+        Utils.showWarning('Please calibrate the device first');
+        return;
+    }
+
+    if (isPumpRunning) {
+        Utils.showWarning('Pump is already running');
+        return;
+    }
 
     const volume = parseFloat(el.volumeInput?.value) || 0;
-    const rpm = parseInt(el.volumeRpmInput?.value) || 100;
     const offTime = parseFloat(el.volumeOffTime?.value) || 0;
     const direction = el.volumeDirCCW?.classList.contains('active') ? 'CCW' : 'CW';
 
@@ -712,22 +711,18 @@ async function dispenseVolume() {
         return;
     }
 
-    if (rpm < 10 || rpm > 400) {
-        Utils.showWarning('Speed must be between 10 and 400 RPM');
-        return;
-    }
-
     if (offTime < 0 || offTime > 10) {
         Utils.showWarning('Off Time must be between 0 and 10 seconds');
         return;
     }
 
-    try {
-        Utils.showLoading('Starting dispense...');
+    // Optimistic UI update first
+    setPumpRunning(true);
 
+    try {
         await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
             command: 'DISPENSE_VOLUME',
-            rpm: rpm,
+            rpm: VOLUME_DISPENSE_RPM,
             direction: direction,
             onTime: 0,
             offTime: offTime * 1000, // Convert to ms
@@ -737,15 +732,11 @@ async function dispenseVolume() {
             acknowledged: false
         });
 
-        // Optimistic UI update
-        setPumpRunning(true);
-
-        Utils.hideLoading();
         Utils.showSuccess(`Dispensing ${volume} mL`);
     } catch (error) {
-        Utils.hideLoading();
         console.error('Error dispensing volume:', error);
-        Utils.showError('Failed to start dispense');
+        setPumpRunning(false);
+        Utils.showError('Failed to start dispense. Check connection.');
     }
 }
 

@@ -97,7 +97,7 @@ async function connectDevice(deviceId, nickname = '') {
 
     // Validate format
     if (!Utils.isValidDeviceId(deviceId)) {
-        Utils.showError(Utils.ERRORS.INVALID_DEVICE_ID.en);
+        Utils.showError(Utils.ERRORS.INVALID_DEVICE_ID);
         return false;
     }
 
@@ -108,7 +108,7 @@ async function connectDevice(deviceId, nickname = '') {
         const exists = await deviceExists(deviceId);
         if (!exists) {
             Utils.hideLoading();
-            Utils.showError(Utils.ERRORS.DEVICE_NOT_FOUND.en);
+            Utils.showError(Utils.ERRORS.DEVICE_NOT_FOUND);
             return false;
         }
 
@@ -116,7 +116,7 @@ async function connectDevice(deviceId, nickname = '') {
         const uid = Auth.getCurrentUserId();
         if (!uid) {
             Utils.hideLoading();
-            Utils.showError(Utils.ERRORS.PERMISSION_DENIED.en);
+            Utils.showError(Utils.ERRORS.PERMISSION_DENIED);
             return false;
         }
 
@@ -135,9 +135,9 @@ async function connectDevice(deviceId, nickname = '') {
         console.error('Error connecting device:', error);
 
         if (error.code === 'PERMISSION_DENIED') {
-            Utils.showError(Utils.ERRORS.PERMISSION_DENIED.en);
+            Utils.showError(Utils.ERRORS.PERMISSION_DENIED);
         } else {
-            Utils.showError(Utils.ERRORS.CONNECTION_FAILED.en);
+            Utils.showError(Utils.ERRORS.CONNECTION_FAILED);
         }
 
         return false;

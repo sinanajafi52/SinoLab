@@ -17,36 +17,15 @@ const STORAGE_KEYS = {
     USER: 'frogpump_user'
 };
 
-// Error messages (bilingual)
+// Error messages
 const ERRORS = {
-    INVALID_DEVICE_ID: {
-        en: 'Invalid Device ID format. Example: FROG-A1B2C3',
-        fa: 'فرمت شناسه نامعتبر است. مثال: FROG-A1B2C3'
-    },
-    DEVICE_NOT_FOUND: {
-        en: 'Device not found. Please check the ID.',
-        fa: 'دستگاه یافت نشد. شناسه را بررسی کنید.'
-    },
-    CALIBRATION_REQUIRED: {
-        en: 'Calibration required for volume-based dispense.',
-        fa: 'برای پمپ بر اساس حجم، کالیبراسیون لازم است.'
-    },
-    CONNECTION_FAILED: {
-        en: 'Connection failed. Check your internet.',
-        fa: 'اتصال برقرار نشد. اینترنت را بررسی کنید.'
-    },
-    PERMISSION_DENIED: {
-        en: 'Permission denied. Please login again.',
-        fa: 'دسترسی رد شد. دوباره وارد شوید.'
-    },
-    AUTH_FAILED: {
-        en: 'Authentication failed. Please try again.',
-        fa: 'احراز هویت ناموفق. دوباره تلاش کنید.'
-    },
-    NETWORK_ERROR: {
-        en: 'Network error. Please check your connection.',
-        fa: 'خطای شبکه. اتصال خود را بررسی کنید.'
-    }
+    INVALID_DEVICE_ID: 'Invalid Device ID format. Example: FROG-A1B2C3',
+    DEVICE_NOT_FOUND: 'Device not found. Please check the ID.',
+    CALIBRATION_REQUIRED: 'Calibration required for volume-based dispense.',
+    CONNECTION_FAILED: 'Connection failed. Check your internet.',
+    PERMISSION_DENIED: 'Permission denied. Please login again.',
+    AUTH_FAILED: 'Authentication failed. Please try again.',
+    NETWORK_ERROR: 'Network error. Please check your connection.'
 };
 
 // ========================================

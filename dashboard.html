@@ -11,25 +11,394 @@
 
     <title>SinoLab - Dashboard</title>
 
-    <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
-
-    <!-- Icons -->
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
-
-    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- Styles -->
     <link rel="stylesheet" href="css/style.css">
 
-    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <style>
+        /* PumpPilot-style Pump Control */
+        .pump-control-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 16px;
+            padding: 32px;
+        }
+
+        .pump-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            margin-bottom: 32px;
+        }
+
+        .pump-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .pump-section-label {
+            color: #22d3ee;
+            font-size: 14px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+        }
+
+        /* RPM Control */
+        .rpm-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .rpm-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            border: 2px solid #333;
+            background: #262626;
+            color: #fff;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+        }
+
+        .rpm-btn:hover:not(:disabled) {
+            border-color: #facc15;
+            background: #facc15;
+            color: #000;
+        }
+
+        .rpm-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .rpm-value-box {
+            width: 100px;
+            height: 48px;
+            background: #262626;
+            border: 2px solid #333;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .rpm-value-input {
+            width: 80px;
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 20px;
+            font-weight: 700;
+            text-align: center;
+            font-family: inherit;
+        }
+
+        .rpm-value-input:focus {
+            outline: none;
+        }
+
+        .rpm-value-input:disabled {
+            color: #888;
+        }
+
+        .rpm-slider-container {
+            width: 100%;
+            max-width: 220px;
+        }
+
+        .rpm-slider {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #333;
+            border-radius: 4px;
+            outline: none;
+        }
+
+        .rpm-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #facc15;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .rpm-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #facc15;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        .rpm-slider:disabled {
+            opacity: 0.5;
+        }
+
+        .rpm-range {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 4px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Flow Display */
+        .flow-display-box {
+            width: 140px;
+            height: 80px;
+            background: #262626;
+            border: 2px solid #333;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .flow-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        /* Direction Control */
+        .direction-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid #facc15;
+            background: #262626;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            margin-bottom: 8px;
+        }
+
+        .direction-btn:hover:not(:disabled) {
+            background: #facc15;
+        }
+
+        .direction-btn:hover:not(:disabled) .direction-arrow {
+            color: #000;
+        }
+
+        .direction-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .direction-arrow {
+            font-size: 40px;
+            color: #facc15;
+            transition: color 0.15s;
+        }
+
+        .direction-label {
+            font-size: 14px;
+            color: #888;
+            font-weight: 500;
+        }
+
+        /* Total Flow Display */
+        .total-flow-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .total-flow-value {
+            font-size: 48px;
+            font-weight: 700;
+            color: #fff;
+            font-family: 'Inter', monospace;
+        }
+
+        .total-flow-unit {
+            font-size: 16px;
+            color: #666;
+            margin-left: 4px;
+        }
+
+        /* Start/Stop Button */
+        .start-btn {
+            width: 100%;
+            max-width: 200px;
+            height: 56px;
+            border-radius: 12px;
+            border: none;
+            background: #facc15;
+            color: #000;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin: 0 auto;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+
+        .start-btn:hover {
+            background: #fde047;
+            transform: scale(1.02);
+        }
+
+        .start-btn.running {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        .start-btn.running:hover {
+            background: #f87171;
+        }
+
+        .start-btn-icon {
+            font-size: 20px;
+        }
+
+        /* Status Panel */
+        .status-panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 24px;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .status-row:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            color: #888;
+            font-size: 14px;
+        }
+
+        .status-value {
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status-value.running {
+            color: #22c55e;
+        }
+
+        .status-value.stopped {
+            color: #888;
+        }
+
+        /* Warning Banner */
+        .calib-warning {
+            background: rgba(249, 115, 22, 0.1);
+            border: 1px solid #f97316;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .calib-warning.hidden {
+            display: none;
+        }
+
+        .calib-warning-icon {
+            font-size: 24px;
+        }
+
+        .calib-warning-text {
+            color: #f97316;
+            font-size: 14px;
+        }
+
+        /* Lock Overlay */
+        .lock-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s;
+        }
+
+        .lock-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .lock-content {
+            text-align: center;
+        }
+
+        .lock-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .lock-text {
+            font-size: 20px;
+            color: #f97316;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .lock-subtext {
+            font-size: 14px;
+            color: #888;
+        }
+
+        @media (max-width: 600px) {
+            .pump-grid {
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+
+            .pump-control-card {
+                padding: 20px;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="dashboard-layout">
@@ -63,12 +432,8 @@
                     <span id="sidebarConnectionStatus" class="sidebar-connection connecting">Connecting...</span>
                 </div>
                 <div class="sidebar-actions">
-                    <button id="changeDeviceBtn" class="sidebar-action-btn" title="Change Device">
-                        📱
-                    </button>
-                    <button id="logoutBtn" class="sidebar-action-btn" title="Logout">
-                        🚪
-                    </button>
+                    <button id="changeDeviceBtn" class="sidebar-action-btn" title="Change Device">📱</button>
+                    <button id="logoutBtn" class="sidebar-action-btn" title="Logout">🚪</button>
                 </div>
             </div>
         </aside>
@@ -83,21 +448,20 @@
             <div id="mobileConnectionStatus" class="mobile-connection connecting"></div>
         </header>
 
-        <!-- Mobile Sidebar Overlay -->
         <div id="sidebarOverlay" class="sidebar-overlay"></div>
 
-        <!-- Running Lock Overlay -->
-        <div id="runningLockOverlay" class="running-lock-overlay hidden">
-            <div class="running-lock-content">
-                <div class="running-lock-icon">⚠️</div>
-                <div class="running-lock-text">پمپ در حال اجرا است</div>
-                <div class="running-lock-subtext">برای رفتن به صفحات دیگر ابتدا پمپ را متوقف کنید</div>
+        <!-- Lock Overlay -->
+        <div id="lockOverlay" class="lock-overlay">
+            <div class="lock-content">
+                <div class="lock-icon">⚠️</div>
+                <div class="lock-text">Pump is Running</div>
+                <div class="lock-subtext">Stop the pump first to navigate to other pages</div>
             </div>
         </div>
 
         <!-- Main Content -->
         <main class="dashboard-main">
-            <!-- Status Page (Pump Control) -->
+            <!-- Status Page -->
             <div id="statusPage" class="dashboard-page active">
                 <div class="page-header">
                     <h1 class="page-title">Pump Control</h1>
@@ -106,143 +470,129 @@
 
                 <div class="page-content">
                     <!-- Calibration Warning -->
-                    <div id="calibrationWarning" class="warning-banner hidden">
-                        <span class="warning-icon">⚠️</span>
-                        <div class="warning-content">
-                            <span class="warning-title">Calibration Required</span>
-                            <span class="warning-text">Please calibrate and set Tube ID first to enable Flow control.</span>
-                        </div>
+                    <div id="calibWarning" class="calib-warning hidden">
+                        <span class="calib-warning-icon">⚠️</span>
+                        <span class="calib-warning-text">Calibration Required - Please calibrate and set Tube ID first to enable Flow control.</span>
                     </div>
 
-                    <!-- Pump Control Panel -->
-                    <div class="pump-control-panel">
-                        <div class="control-grid">
-                            <!-- RPM Control -->
-                            <div class="control-section rpm-section">
-                                <div class="control-section-title">RPM</div>
-                                <div class="rpm-control">
-                                    <button type="button" id="rpmMinus" class="rpm-btn rpm-minus" disabled>−</button>
-                                    <input type="number" id="rpmInput" class="rpm-input" value="100" min="0" max="400" disabled>
-                                    <button type="button" id="rpmPlus" class="rpm-btn rpm-plus" disabled>+</button>
+                    <!-- Pump Control Card -->
+                    <div class="pump-control-card">
+                        <div class="pump-grid">
+                            <!-- RPM -->
+                            <div class="pump-section">
+                                <div class="pump-section-label">RPM</div>
+                                <div class="rpm-controls">
+                                    <button type="button" id="rpmMinus" class="rpm-btn">−</button>
+                                    <div class="rpm-value-box">
+                                        <input type="number" id="rpmInput" class="rpm-value-input" value="100" min="0" max="400">
+                                    </div>
+                                    <button type="button" id="rpmPlus" class="rpm-btn">+</button>
                                 </div>
-                                <input type="range" id="rpmSlider" class="rpm-slider" min="0" max="400" step="10" value="100" disabled>
-                                <div class="rpm-range-labels">
-                                    <span>0</span>
-                                    <span>400</span>
+                                <div class="rpm-slider-container">
+                                    <input type="range" id="rpmSlider" class="rpm-slider" min="0" max="400" step="10" value="100">
+                                    <div class="rpm-range">
+                                        <span>0</span>
+                                        <span>400</span>
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Flow Display -->
-                            <div class="control-section flow-section">
-                                <div class="control-section-title">Flow (ml/min)</div>
-                                <div class="flow-display">
+                            <!-- Flow -->
+                            <div class="pump-section">
+                                <div class="pump-section-label">Flow (ml/min)</div>
+                                <div class="flow-display-box">
                                     <span id="flowValue" class="flow-value">--</span>
                                 </div>
                             </div>
 
-                            <!-- Direction Control -->
-                            <div class="control-section direction-section">
-                                <div class="control-section-title">Direction</div>
-                                <div class="direction-control">
-                                    <button type="button" id="directionBtn" class="direction-btn-large" disabled>
-                                        <span class="direction-icon">↻</span>
-                                    </button>
-                                    <span id="directionText" class="direction-text-label">ساعتگرد</span>
-                                </div>
+                            <!-- Direction -->
+                            <div class="pump-section">
+                                <div class="pump-section-label">Direction</div>
+                                <button type="button" id="directionBtn" class="direction-btn">
+                                    <span id="directionArrow" class="direction-arrow">↻</span>
+                                </button>
+                                <span id="directionLabel" class="direction-label">CW</span>
                             </div>
 
-                            <!-- Total Flow Display -->
-                            <div class="control-section total-section">
-                                <div class="control-section-title">Total Flow</div>
-                                <div class="total-flow-display">
-                                    <span id="totalFlowValue" class="total-flow-value">0.00</span>
-                                    <span class="total-flow-unit">mL</span>
+                            <!-- Total Flow -->
+                            <div class="pump-section">
+                                <div class="pump-section-label">Total Flow</div>
+                                <div class="total-flow-box">
+                                    <span>
+                                        <span id="totalFlowValue" class="total-flow-value">0.00</span>
+                                        <span class="total-flow-unit">mL</span>
+                                    </span>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Start/Stop Button -->
-                        <div class="start-stop-container">
-                            <button type="button" id="startStopBtn" class="start-stop-btn start">
-                                <span class="start-stop-icon">▶</span>
-                                <span class="start-stop-text">Start</span>
-                            </button>
-                        </div>
+                        <button type="button" id="startStopBtn" class="start-btn">
+                            <span id="startStopIcon" class="start-btn-icon">▷</span>
+                            <span id="startStopText">Start</span>
+                        </button>
                     </div>
 
-                    <!-- Status Info -->
-                    <div class="status-info-panel">
-                        <div class="status-info-row">
-                            <span class="status-info-label">Status</span>
-                            <span id="pumpStatus" class="status-info-value status-stopped">Stopped</span>
+                    <!-- Status Panel -->
+                    <div class="status-panel">
+                        <div class="status-row">
+                            <span class="status-label">Status</span>
+                            <span id="pumpStatus" class="status-value stopped">Stopped</span>
                         </div>
-                        <div class="status-info-row">
-                            <span class="status-info-label">Current RPM</span>
-                            <span id="currentRPM" class="status-info-value">0</span>
+                        <div class="status-row">
+                            <span class="status-label">Current RPM</span>
+                            <span id="currentRPM" class="status-value">0</span>
                         </div>
-                        <div class="status-info-row">
-                            <span class="status-info-label">Control Mode</span>
-                            <span id="controlMode" class="status-info-value">LOCAL</span>
+                        <div class="status-row">
+                            <span class="status-label">Control Mode</span>
+                            <span id="controlMode" class="status-value">LOCAL</span>
                         </div>
-                        <div class="status-info-row">
-                            <span class="status-info-label">Session Dispensed</span>
-                            <span id="sessionDispensed" class="status-info-value">0.0 mL</span>
+                        <div class="status-row">
+                            <span class="status-label">Session Dispensed</span>
+                            <span id="sessionDispensed" class="status-value">0.0 mL</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Dispense Page (Volume-Based) -->
+            <!-- Dispense Page -->
             <div id="dispensePage" class="dashboard-page">
                 <div class="page-header">
                     <h1 class="page-title">Volume Dispense</h1>
                 </div>
 
                 <div class="page-content">
-                    <!-- Calibration Required Warning -->
-                    <div id="dispenseCalibrationWarning" class="warning-banner">
-                        <span class="warning-icon">⚠️</span>
-                        <div class="warning-content">
-                            <span class="warning-title">Calibration Required</span>
-                            <span class="warning-text">Volume-based dispense requires calibration. Please calibrate from device first.</span>
-                        </div>
+                    <div id="dispenseWarning" class="calib-warning">
+                        <span class="calib-warning-icon">⚠️</span>
+                        <span class="calib-warning-text">Calibration Required - Volume-based dispense requires calibration. Please calibrate from device first.</span>
                     </div>
 
-                    <!-- Volume Dispense Panel -->
-                    <div id="volumeDispensePanel" class="control-panel hidden">
-                        <!-- Volume Input -->
+                    <div id="dispensePanel" class="pump-control-card hidden">
                         <div class="control-group">
                             <label class="control-label">Target Volume (mL)</label>
-                            <div class="control-input-wrapper">
-                                <input type="number" id="volumeInput" class="control-input" min="0.1" max="9999" step="0.1" placeholder="Enter volume">
-                            </div>
+                            <input type="number" id="volumeInput" class="control-input" min="0.1" max="9999" step="0.1" placeholder="Enter volume">
                         </div>
 
-                        <!-- Speed (RPM) -->
                         <div class="control-group">
                             <label class="control-label">Speed (RPM)</label>
-                            <div class="control-input-wrapper">
-                                <input type="number" id="volumeRpmInput" class="control-input" min="10" max="400" value="100">
-                            </div>
+                            <input type="number" id="volumeRpmInput" class="control-input" min="10" max="400" value="100">
                             <input type="range" id="volumeRpmSlider" class="control-slider" min="10" max="400" step="10" value="100">
                         </div>
 
-                        <!-- Direction -->
                         <div class="control-group">
                             <label class="control-label">Direction</label>
                             <div class="direction-toggle">
                                 <button type="button" id="volumeDirCW" class="direction-toggle-btn active">
                                     <span>↻</span>
-                                    <span>ساعتگرد</span>
+                                    <span>CW</span>
                                 </button>
                                 <button type="button" id="volumeDirCCW" class="direction-toggle-btn">
                                     <span>↺</span>
-                                    <span>پادساعتگرد</span>
+                                    <span>CCW</span>
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Estimated Time -->
                         <div class="estimation-box" id="estimatedTime">
                             <div class="estimation-icon">⏱️</div>
                             <div class="estimation-content">
@@ -251,11 +601,8 @@
                             </div>
                         </div>
 
-                        <!-- Dispense Button -->
                         <div class="control-actions">
-                            <button id="dispenseBtn" class="btn btn-primary btn-lg btn-full">
-                                💧 Dispense
-                            </button>
+                            <button id="dispenseBtn" class="btn btn-primary btn-lg btn-full">💧 Dispense</button>
                         </div>
                     </div>
                 </div>
@@ -268,7 +615,6 @@
                 </div>
 
                 <div class="page-content">
-                    <!-- Device Information -->
                     <div class="info-section">
                         <h3 class="info-section-title">📱 Device Information</h3>
                         <div class="info-card">
@@ -303,7 +649,6 @@
                         </div>
                     </div>
 
-                    <!-- Calibration Information -->
                     <div class="info-section">
                         <h3 class="info-section-title">⚙️ Calibration Settings</h3>
                         <div class="info-card">
@@ -328,32 +673,26 @@
                                 <span class="info-value" id="settingsAntiDrip">--</span>
                             </div>
                         </div>
-                        <p class="info-note">
-                            ℹ️ Calibration settings can only be changed from the device's physical controls.
-                        </p>
+                        <p class="info-note">ℹ️ Calibration settings can only be changed from the device's physical controls.</p>
                     </div>
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- JavaScript Modules -->
     <script src="js/firebase-config.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/device.js"></script>
     <script src="js/dashboard.js"></script>
 
-    <!-- Page Initialization -->
     <script>
-        // Register service worker
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js')
-                .then((reg) => console.log('Service Worker registered:', reg.scope))
-                .catch((err) => console.log('Service Worker registration failed:', err));
+                .then((reg) => console.log('SW registered'))
+                .catch((err) => console.log('SW failed'));
         }
 
-        // Initialize dashboard when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
             Dashboard.initDashboard();
         });

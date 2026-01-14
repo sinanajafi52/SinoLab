@@ -149,14 +149,14 @@ async function signIn() {
         Utils.hideLoading();
 
         // Handle specific error codes
-        let errorMessage = Utils.ERRORS.AUTH_FAILED.en;
+        let errorMessage = Utils.ERRORS.AUTH_FAILED;
 
         switch (error.code) {
             case 'auth/popup-closed-by-user':
                 errorMessage = 'Sign-in cancelled';
                 break;
             case 'auth/network-request-failed':
-                errorMessage = Utils.ERRORS.NETWORK_ERROR.en;
+                errorMessage = Utils.ERRORS.NETWORK_ERROR;
                 break;
             case 'auth/popup-blocked':
                 errorMessage = 'Popup blocked. Please allow popups for this site.';

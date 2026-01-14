@@ -60,19 +60,22 @@ function cacheElements() {
     el.sidebarDeviceId = document.getElementById('sidebarDeviceId');
     el.sidebarConnectionStatus = document.getElementById('sidebarConnectionStatus');
     el.mobileConnectionStatus = document.getElementById('mobileConnectionStatus');
-    el.runningLockOverlay = document.getElementById('runningLockOverlay');
+    el.lockOverlay = document.getElementById('lockOverlay');
 
     // Status page - Pump Control
-    el.calibrationWarning = document.getElementById('calibrationWarning');
+    el.calibWarning = document.getElementById('calibWarning');
     el.rpmMinus = document.getElementById('rpmMinus');
     el.rpmPlus = document.getElementById('rpmPlus');
     el.rpmInput = document.getElementById('rpmInput');
     el.rpmSlider = document.getElementById('rpmSlider');
     el.flowValue = document.getElementById('flowValue');
     el.directionBtn = document.getElementById('directionBtn');
-    el.directionText = document.getElementById('directionText');
+    el.directionArrow = document.getElementById('directionArrow');
+    el.directionLabel = document.getElementById('directionLabel');
     el.totalFlowValue = document.getElementById('totalFlowValue');
     el.startStopBtn = document.getElementById('startStopBtn');
+    el.startStopIcon = document.getElementById('startStopIcon');
+    el.startStopText = document.getElementById('startStopText');
     el.lastUpdated = document.getElementById('lastUpdated');
 
     // Status info panel
@@ -82,8 +85,8 @@ function cacheElements() {
     el.sessionDispensed = document.getElementById('sessionDispensed');
 
     // Dispense page
-    el.dispenseCalibrationWarning = document.getElementById('dispenseCalibrationWarning');
-    el.volumeDispensePanel = document.getElementById('volumeDispensePanel');
+    el.dispenseWarning = document.getElementById('dispenseWarning');
+    el.dispensePanel = document.getElementById('dispensePanel');
     el.volumeInput = document.getElementById('volumeInput');
     el.volumeRpmInput = document.getElementById('volumeRpmInput');
     el.volumeRpmSlider = document.getElementById('volumeRpmSlider');
@@ -225,10 +228,10 @@ function setupNavigation() {
 }
 
 function showRunningLockMessage() {
-    if (el.runningLockOverlay) {
-        el.runningLockOverlay.classList.remove('hidden');
+    if (el.lockOverlay) {
+        el.lockOverlay.classList.add('show');
         setTimeout(() => {
-            el.runningLockOverlay.classList.add('hidden');
+            el.lockOverlay.classList.remove('show');
         }, 2000);
     }
 }
@@ -263,14 +266,11 @@ function toggleDirection() {
 }
 
 function updateDirectionDisplay() {
-    if (el.directionBtn) {
-        const icon = el.directionBtn.querySelector('.direction-icon');
-        if (icon) {
-            icon.textContent = currentDirection === 'CW' ? '↻' : '↺';
-        }
+    if (el.directionArrow) {
+        el.directionArrow.textContent = currentDirection === 'CW' ? '↻' : '↺';
     }
-    if (el.directionText) {
-        el.directionText.textContent = currentDirection === 'CW' ? 'ساعتگرد' : 'پادساعتگرد';
+    if (el.directionLabel) {
+        el.directionLabel.textContent = currentDirection;
     }
 }
 
@@ -306,7 +306,7 @@ async function startPump() {
     if (!currentDeviceId) return;
 
     if (targetRPM <= 0) {
-        Utils.showWarning('لطفا RPM را بیشتر از صفر تنظیم کنید');
+        Utils.showWarning('Please set RPM higher than 0');
         return;
     }
 
@@ -364,19 +364,14 @@ function setPumpRunning(running) {
 
     // Update Start/Stop button
     if (el.startStopBtn) {
-        const icon = el.startStopBtn.querySelector('.start-stop-icon');
-        const text = el.startStopBtn.querySelector('.start-stop-text');
-
         if (running) {
-            el.startStopBtn.classList.remove('start');
-            el.startStopBtn.classList.add('stop');
-            if (icon) icon.textContent = '⏹';
-            if (text) text.textContent = 'Stop';
+            el.startStopBtn.classList.add('running');
+            if (el.startStopIcon) el.startStopIcon.textContent = '⏹';
+            if (el.startStopText) el.startStopText.textContent = 'Stop';
         } else {
-            el.startStopBtn.classList.remove('stop');
-            el.startStopBtn.classList.add('start');
-            if (icon) icon.textContent = '▶';
-            if (text) text.textContent = 'Start';
+            el.startStopBtn.classList.remove('running');
+            if (el.startStopIcon) el.startStopIcon.textContent = '▷';
+            if (el.startStopText) el.startStopText.textContent = 'Start';
         }
     }
 
@@ -384,12 +379,12 @@ function setPumpRunning(running) {
     if (el.pumpStatus) {
         if (running) {
             el.pumpStatus.textContent = 'Running';
-            el.pumpStatus.classList.remove('status-stopped');
-            el.pumpStatus.classList.add('status-running');
+            el.pumpStatus.classList.remove('stopped');
+            el.pumpStatus.classList.add('running');
         } else {
             el.pumpStatus.textContent = 'Stopped';
-            el.pumpStatus.classList.remove('status-running');
-            el.pumpStatus.classList.add('status-stopped');
+            el.pumpStatus.classList.remove('running');
+            el.pumpStatus.classList.add('stopped');
         }
     }
 
@@ -591,27 +586,27 @@ function checkCalibration() {
     isCalibrated = (tubeID > 0 && mlPerRev > 0);
 
     // Status page warning
-    if (el.calibrationWarning) {
+    if (el.calibWarning) {
         if (isCalibrated) {
-            el.calibrationWarning.classList.add('hidden');
+            el.calibWarning.classList.add('hidden');
         } else {
-            el.calibrationWarning.classList.remove('hidden');
+            el.calibWarning.classList.remove('hidden');
         }
     }
 
     // Dispense page
-    if (el.dispenseCalibrationWarning) {
+    if (el.dispenseWarning) {
         if (isCalibrated) {
-            el.dispenseCalibrationWarning.classList.add('hidden');
+            el.dispenseWarning.classList.add('hidden');
         } else {
-            el.dispenseCalibrationWarning.classList.remove('hidden');
+            el.dispenseWarning.classList.remove('hidden');
         }
     }
-    if (el.volumeDispensePanel) {
+    if (el.dispensePanel) {
         if (isCalibrated) {
-            el.volumeDispensePanel.classList.remove('hidden');
+            el.dispensePanel.classList.remove('hidden');
         } else {
-            el.volumeDispensePanel.classList.add('hidden');
+            el.dispensePanel.classList.add('hidden');
         }
     }
 

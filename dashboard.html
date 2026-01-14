@@ -388,6 +388,235 @@
             color: #888;
         }
 
+        /* Dispense Page Styles */
+        .dispense-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .dispense-tab {
+            flex: 1;
+            padding: 12px 16px;
+            background: #262626;
+            border: 2px solid #333;
+            border-radius: 8px;
+            color: #888;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+
+        .dispense-tab:hover {
+            border-color: #444;
+            color: #fff;
+        }
+
+        .dispense-tab.active {
+            background: #facc15;
+            border-color: #facc15;
+            color: #000;
+        }
+
+        .dispense-tab.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .dispense-panel {
+            display: none;
+        }
+
+        .dispense-panel.active {
+            display: block;
+        }
+
+        .panel-description {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-label {
+            display: block;
+            color: #22d3ee;
+            font-size: 13px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .control-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: #262626;
+            border: 2px solid #333;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+
+        .control-input:focus {
+            outline: none;
+            border-color: #facc15;
+        }
+
+        .control-input::placeholder {
+            color: #555;
+        }
+
+        .input-with-slider {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-slider {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #333;
+            border-radius: 4px;
+            outline: none;
+        }
+
+        .control-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #facc15;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .control-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #facc15;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        .input-hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .control-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .direction-toggle {
+            display: flex;
+            gap: 8px;
+        }
+
+        .direction-toggle-btn {
+            flex: 1;
+            padding: 12px 16px;
+            background: #262626;
+            border: 2px solid #333;
+            border-radius: 8px;
+            color: #888;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+
+        .direction-toggle-btn:hover {
+            border-color: #facc15;
+        }
+
+        .direction-toggle-btn.active {
+            background: #facc15;
+            border-color: #facc15;
+            color: #000;
+        }
+
+        .estimation-box {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: #262626;
+            border: 2px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 24px 0;
+        }
+
+        .estimation-icon {
+            font-size: 32px;
+        }
+
+        .estimation-content {
+            flex: 1;
+        }
+
+        .estimation-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .estimation-label {
+            font-size: 13px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .control-actions {
+            margin-top: 24px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: #facc15;
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: #fde047;
+        }
+
+        .btn-lg {
+            padding: 16px 32px;
+            font-size: 18px;
+        }
+
+        .btn-full {
+            width: 100%;
+        }
+
         @media (max-width: 600px) {
             .pump-grid {
                 grid-template-columns: 1fr;
@@ -396,6 +625,11 @@
 
             .pump-control-card {
                 padding: 20px;
+            }
+
+            .control-row {
+                grid-template-columns: 1fr;
+                gap: 16px;
             }
         }
     </style>
@@ -500,7 +734,7 @@
                             <!-- Flow -->
                             <div class="pump-section">
                                 <div class="pump-section-label">Flow (ml/min)</div>
-                                <div class="flow-display-box">
+                                <div id="flowDisplayBox" class="flow-display-box" style="cursor: pointer;">
                                     <span id="flowValue" class="flow-value">--</span>
                                 </div>
                             </div>
@@ -558,25 +792,88 @@
             <!-- Dispense Page -->
             <div id="dispensePage" class="dashboard-page">
                 <div class="page-header">
-                    <h1 class="page-title">Volume Dispense</h1>
+                    <h1 class="page-title">Dispense</h1>
                 </div>
 
                 <div class="page-content">
-                    <div id="dispenseWarning" class="calib-warning">
-                        <span class="calib-warning-icon">⚠️</span>
-                        <span class="calib-warning-text">Calibration Required - Volume-based dispense requires calibration. Please calibrate from device first.</span>
+                    <!-- Mode Tabs -->
+                    <div class="dispense-tabs">
+                        <button id="rpmModeTab" class="dispense-tab active">⏱️ RPM Based</button>
+                        <button id="volumeModeTab" class="dispense-tab">💧 Volume Based</button>
                     </div>
 
-                    <div id="dispensePanel" class="pump-control-card hidden">
+                    <!-- RPM-Based Dispense Panel -->
+                    <div id="rpmDispensePanel" class="pump-control-card dispense-panel active">
+                        <p class="panel-description">Run the pump at a set speed for a specific duration.</p>
+
+                        <div class="control-group">
+                            <label class="control-label">Speed (RPM)</label>
+                            <div class="input-with-slider">
+                                <input type="number" id="dispenseRpmInput" class="control-input" min="10" max="400" value="100">
+                                <input type="range" id="dispenseRpmSlider" class="control-slider" min="10" max="400" step="10" value="100">
+                            </div>
+                            <span class="input-hint">Range: 10-400 RPM</span>
+                        </div>
+
+                        <div class="control-row">
+                            <div class="control-group">
+                                <label class="control-label">On Time (sec)</label>
+                                <input type="number" id="dispenseOnTime" class="control-input" min="0.1" max="10" step="0.1" value="1">
+                                <span class="input-hint">Max: 10 sec</span>
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Off Time (sec)</label>
+                                <input type="number" id="dispenseOffTime" class="control-input" min="0" max="10" step="0.1" value="0">
+                                <span class="input-hint">Max: 10 sec</span>
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <label class="control-label">Direction</label>
+                            <div class="direction-toggle">
+                                <button type="button" id="dispenseRpmDirCW" class="direction-toggle-btn active">
+                                    <span>↻</span>
+                                    <span>CW</span>
+                                </button>
+                                <button type="button" id="dispenseRpmDirCCW" class="direction-toggle-btn">
+                                    <span>↺</span>
+                                    <span>CCW</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="control-actions">
+                            <button id="rpmDispenseBtn" class="btn btn-primary btn-lg btn-full">▷ Run</button>
+                        </div>
+                    </div>
+
+                    <!-- Volume-Based Dispense Panel -->
+                    <div id="volumeDispensePanel" class="pump-control-card dispense-panel">
+                        <div id="dispenseWarning" class="calib-warning">
+                            <span class="calib-warning-icon">⚠️</span>
+                            <span class="calib-warning-text">Calibration Required - Please set tube size and calibrate from the device first.</span>
+                        </div>
+
+                        <p class="panel-description">Dispense a specific volume of liquid.</p>
+
                         <div class="control-group">
                             <label class="control-label">Target Volume (mL)</label>
-                            <input type="number" id="volumeInput" class="control-input" min="0.1" max="9999" step="0.1" placeholder="Enter volume">
+                            <input type="number" id="volumeInput" class="control-input" min="0.1" step="0.1" placeholder="Enter volume">
                         </div>
 
                         <div class="control-group">
                             <label class="control-label">Speed (RPM)</label>
-                            <input type="number" id="volumeRpmInput" class="control-input" min="10" max="400" value="100">
-                            <input type="range" id="volumeRpmSlider" class="control-slider" min="10" max="400" step="10" value="100">
+                            <div class="input-with-slider">
+                                <input type="number" id="volumeRpmInput" class="control-input" min="10" max="400" value="100">
+                                <input type="range" id="volumeRpmSlider" class="control-slider" min="10" max="400" step="10" value="100">
+                            </div>
+                            <span class="input-hint">Range: 10-400 RPM</span>
+                        </div>
+
+                        <div class="control-group">
+                            <label class="control-label">Off Time Between Cycles (sec)</label>
+                            <input type="number" id="volumeOffTime" class="control-input" min="0" max="10" step="0.1" value="0">
+                            <span class="input-hint">Max: 10 sec (0 = continuous)</span>
                         </div>
 
                         <div class="control-group">
@@ -602,7 +899,7 @@
                         </div>
 
                         <div class="control-actions">
-                            <button id="dispenseBtn" class="btn btn-primary btn-lg btn-full">💧 Dispense</button>
+                            <button id="volumeDispenseBtn" class="btn btn-primary btn-lg btn-full">💧 Dispense</button>
                         </div>
                     </div>
                 </div>

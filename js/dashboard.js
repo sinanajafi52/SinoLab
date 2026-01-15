@@ -12,7 +12,7 @@ let deviceInfo = null;
 let deviceSettings = null;
 let isCalibrated = false;
 let isPumpRunning = false;
-let isDeviceOnline = false;
+let deviceOnlineStatus = false;  // Renamed to avoid conflict with device.js isDeviceOnline function
 let currentDirection = 'CW'; // CW or CCW
 let targetRPM = 100;
 let dispenseMode = 'rpm'; // 'rpm' or 'volume'
@@ -759,7 +759,7 @@ async function preFlush() {
     }
 
     // Check if device is online
-    if (!isDeviceOnline) {
+    if (!deviceOnlineStatus) {
         Utils.showWarning('Device is offline');
         return;
     }
@@ -835,7 +835,7 @@ function updateStatusUI() {
     if (!deviceStatus) return;
 
     // Update device online state
-    isDeviceOnline = deviceStatus.online === true;
+    deviceOnlineStatus = deviceStatus.online === true;
 
     // Update pump running state from device
     const running = deviceStatus.pumpRunning === true;

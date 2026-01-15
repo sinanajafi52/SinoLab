@@ -1016,6 +1016,81 @@
             }
 
         }
+
+        /* ========================================
+           PREMIUM SIDEBAR DESIGN
+           ======================================== */
+        .sidebar {
+            background: rgba(20, 20, 20, 0.95);
+            backdrop-filter: blur(15px);
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .sidebar-header {
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: linear-gradient(to right, rgba(255, 255, 255, 0.03), transparent);
+        }
+
+        .sidebar-nav-item {
+            position: relative;
+            margin: 6px 16px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border-left: none;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .sidebar-nav-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: #facc15;
+            opacity: 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px #facc15;
+            border-radius: 4px;
+        }
+
+        .sidebar-nav-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateX(4px);
+        }
+
+        .sidebar-nav-item.active {
+            background: linear-gradient(90deg, rgba(250, 204, 21, 0.15), rgba(250, 204, 21, 0.02));
+            color: #fff;
+        }
+
+        .sidebar-nav-item.active::before {
+            opacity: 1;
+        }
+
+        .sidebar-nav-icon {
+            font-size: 20px;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar-nav-item:hover .sidebar-nav-icon {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        .sidebar-nav-text {
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .sidebar-footer {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(5px);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
     </style>
 </head>
 
@@ -1316,7 +1391,7 @@
                             </div>
                         </div>
                         <div class="info-actions">
-                            <button id="preFlushBtn" class="btn btn-secondary btn-full">
+                            <button id="preFlushBtn" class="btn btn-primary btn-full">
                                 🚿 Pre-Flush
                             </button>
                             <p class="info-hint">Run a quick flush to prime the tubing</p>

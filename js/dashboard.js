@@ -550,7 +550,7 @@ function setPumpRunning(running) {
             el.rpmDispenseBtn.textContent = '⏹ Stop';
             el.rpmDispenseBtn.classList.add('running');
         } else {
-            el.rpmDispenseBtn.textContent = '▷ Run';
+            el.rpmDispenseBtn.textContent = '💧 Dispense';
             el.rpmDispenseBtn.classList.remove('running');
         }
     }
@@ -604,9 +604,16 @@ function setControlsEnabled(enabled) {
  * Update controls state based on device online status and calibration
  */
 function updateControlsState() {
-    // Pre-Flush button - show warning on click if offline
+    // Pre-Flush button - always clickable to enable stop functionality
     if (el.preFlushBtn) {
-        el.preFlushBtn.disabled = isPumpRunning;
+        if (isPumpRunning) {
+            el.preFlushBtn.textContent = '⏹ Stop';
+            el.preFlushBtn.classList.add('running');
+        } else {
+            el.preFlushBtn.textContent = '🚿 Pre-Flush';
+            el.preFlushBtn.classList.remove('running');
+        }
+        el.preFlushBtn.disabled = false;
     }
 
     // Dispense buttons
@@ -783,10 +790,11 @@ async function dispenseVolume() {
 // PRE-FLUSH
 // ========================================
 async function preFlush() {
-    if (!currentDeviceId || isPumpRunning) {
-        if (isPumpRunning) {
-            Utils.showWarning('Pump is already running');
-        }
+    if (!currentDeviceId) return;
+
+    // If pump is running, this button acts as Stop
+    if (isPumpRunning) {
+        await stopPump();
         return;
     }
 

@@ -21,8 +21,11 @@ let dispenseMode = 'rpm'; // 'rpm' or 'volume'
 let statusListener = null;
 let settingsListener = null;
 let infoListener = null;
-let controlListener = null;
+let controlListener = null;  // For control node (mode, acknowledged)
 let connectionListener = null;
+
+// Control state from control node
+let controlMode = 'LOCAL';
 
 // UI Elements
 const el = {};
@@ -818,6 +821,18 @@ function subscribeToDevice() {
         updateInfoUI();
     });
 
+    // Control node updates (for mode and acknowledged)
+    controlListener = deviceRef.child('control').on('value', (snapshot) => {
+        const controlData = snapshot.val() || {};
+        controlMode = controlData.mode || 'LOCAL';
+        updateControlModeUI();
+
+        // Check for acknowledged state to hide loading on buttons
+        if (controlData.acknowledged === true) {
+            hideButtonLoading();
+        }
+    });
+
     console.log('Subscribed to device:', currentDeviceId);
 }
 
@@ -846,10 +861,8 @@ function updateStatusUI() {
         el.currentRPM.textContent = deviceStatus.currentRPM || 0;
     }
 
-    // Control mode
-    if (el.controlMode) {
-        el.controlMode.textContent = deviceStatus.controlMode || 'LOCAL';
-    }
+    // Control mode - now from control node, not status
+    // (updateControlModeUI handles this)
 
     // Session dispensed (show 0 if device resets it)
     const sessionMl = deviceStatus.sessionDispensed || 0;
@@ -861,8 +874,9 @@ function updateStatusUI() {
         el.infoSessionVolume.textContent = `${sessionMl.toFixed(2)} mL`;
     }
 
-    // Total flow
-    const totalMl = deviceStatus.totalDispensed || 0;
+    // Total flow - use totalLiters from board (in liters, convert to mL)
+    const totalLiters = deviceStatus.totalLiters || 0;
+    const totalMl = totalLiters * 1000;  // Convert liters to mL
     if (el.totalFlowValue) {
         el.totalFlowValue.textContent = totalMl.toFixed(2);
     }
@@ -884,11 +898,10 @@ function updateStatusUI() {
 function updateSettingsUI() {
     if (!deviceSettings) return;
 
-    // Tube Size - never show -1
+    // Tube Size - use tubeName only (board doesn't send tubeID)
     if (el.settingsTube) {
-        const tubeID = deviceSettings.tubeID;
         const tubeName = deviceSettings.tubeName;
-        if (tubeID && tubeID > 0 && tubeName) {
+        if (tubeName && tubeName.trim() !== '') {
             el.settingsTube.textContent = tubeName;
             el.settingsTube.classList.remove('warning');
         } else {
@@ -956,10 +969,11 @@ function updateInfoUI() {
 }
 
 function checkCalibration() {
-    const tubeID = deviceSettings?.tubeID || 0;
+    // Board doesn't send tubeID - use mlPerRev > 0 and tubeName not empty
     const mlPerRev = deviceSettings?.mlPerRev || 0;
+    const tubeName = deviceSettings?.tubeName || '';
 
-    isCalibrated = (tubeID > 0 && mlPerRev > 0);
+    isCalibrated = (mlPerRev > 0 && tubeName.trim() !== '');
 
     // Status page warning
     if (el.calibWarning) {
@@ -993,6 +1007,45 @@ function checkCalibration() {
     }
 
     updateEstimatedTime();
+}
+
+/**
+ * Update control mode display (from control node)
+ */
+function updateControlModeUI() {
+    if (el.controlMode) {
+        el.controlMode.textContent = controlMode;
+    }
+}
+
+/**
+ * Show loading state on a button
+ */
+function showButtonLoading(btn, originalText) {
+    if (!btn) return;
+    btn.disabled = true;
+    btn.dataset.originalText = originalText || btn.textContent;
+    btn.innerHTML = '<span class="btn-spinner">⏳</span> Waiting...';
+}
+
+/**
+ * Hide loading state on buttons
+ */
+function hideButtonLoading() {
+    // Restore all buttons that might be in loading state
+    const buttons = [el.startStopBtn, el.rpmDispenseBtn, el.volumeDispenseBtn, el.preFlushBtn];
+    buttons.forEach(btn => {
+        if (btn && btn.dataset.originalText) {
+            btn.disabled = false;
+            // For start/stop button, use the current state
+            if (btn === el.startStopBtn) {
+                setPumpRunning(isPumpRunning);
+            } else {
+                btn.innerHTML = btn.dataset.originalText;
+            }
+            delete btn.dataset.originalText;
+        }
+    });
 }
 
 function updateConnectionStatus(connected) {
@@ -1031,6 +1084,7 @@ function cleanup() {
     if (statusListener) deviceRef.child('status').off('value', statusListener);
     if (settingsListener) deviceRef.child('settings').off('value', settingsListener);
     if (infoListener) deviceRef.child('info').off('value', infoListener);
+    if (controlListener) deviceRef.child('control').off('value', controlListener);
     if (connectionListener) {
         FirebaseApp.database.ref('.info/connected').off('value', connectionListener);
     }

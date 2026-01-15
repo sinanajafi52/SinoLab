@@ -40,23 +40,30 @@ function initDashboard() {
     }
 
     Auth.initProtectedPage(async (user) => {
+        console.log('Auth ready, initializing UI...');
+
         cacheElements();
         setupEventHandlers();
         setupNavigation();
-        subscribeToDevice();
-        setupConnectionMonitoring();
-        Device.setupChangeDeviceButton();
+
+        // Enable controls first (before Firebase data arrives)
+        isPumpRunning = false;
+        setControlsEnabled(true);
+        updateDirectionDisplay();
 
         // Update sidebar device ID
         if (el.sidebarDeviceId) {
             el.sidebarDeviceId.textContent = currentDeviceId;
         }
 
-        // Enable controls initially (pump is stopped)
-        setControlsEnabled(true);
+        // Setup change device button
+        Device.setupChangeDeviceButton();
 
-        // Initialize direction display
-        updateDirectionDisplay();
+        // Subscribe to Firebase after UI is ready
+        subscribeToDevice();
+        setupConnectionMonitoring();
+
+        console.log('Dashboard initialized successfully');
     });
 }
 

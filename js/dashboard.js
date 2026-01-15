@@ -544,6 +544,28 @@ function setPumpRunning(running) {
         }
     }
 
+    // Update Dispense buttons (RPM Mode)
+    if (el.rpmDispenseBtn) {
+        if (running) {
+            el.rpmDispenseBtn.textContent = '⏹ Stop';
+            el.rpmDispenseBtn.classList.add('running');
+        } else {
+            el.rpmDispenseBtn.textContent = '▷ Run';
+            el.rpmDispenseBtn.classList.remove('running');
+        }
+    }
+
+    // Update Dispense buttons (Volume Mode)
+    if (el.volumeDispenseBtn) {
+        if (running) {
+            el.volumeDispenseBtn.textContent = '⏹ Stop';
+            el.volumeDispenseBtn.classList.add('running');
+        } else {
+            el.volumeDispenseBtn.textContent = '💧 Dispense';
+            el.volumeDispenseBtn.classList.remove('running');
+        }
+    }
+
     // Update status display
     if (el.pumpStatus) {
         if (running) {
@@ -588,12 +610,13 @@ function updateControlsState() {
     }
 
     // Dispense buttons
+    // Allow clicking dispense buttons while running to enable "Stop" functionality
     if (el.rpmDispenseBtn) {
-        el.rpmDispenseBtn.disabled = isPumpRunning;
+        el.rpmDispenseBtn.disabled = false;
     }
     if (el.volumeDispenseBtn) {
-        // Volume dispense requires calibration
-        el.volumeDispenseBtn.disabled = isPumpRunning || !isCalibrated;
+        // Volume dispense requires calibration, but we allow stop if running
+        el.volumeDispenseBtn.disabled = (!isPumpRunning && !isCalibrated);
     }
 
     // Update calibration warning visibility
@@ -610,7 +633,13 @@ function updateControlsState() {
 // RPM-BASED DISPENSE
 // ========================================
 async function dispenseRpmBased() {
-    if (!currentDeviceId || isPumpRunning) return;
+    if (!currentDeviceId) return;
+
+    // If pump is running, this button acts as Stop
+    if (isPumpRunning) {
+        await stopPump();
+        return;
+    }
 
     const rpm = parseInt(el.dispenseRpmInput?.value) || 100;
     const onTime = parseFloat(el.dispenseOnTime?.value) || 1;
@@ -708,7 +737,7 @@ async function dispenseVolume() {
     }
 
     if (isPumpRunning) {
-        Utils.showWarning('Pump is already running');
+        await stopPump();
         return;
     }
 

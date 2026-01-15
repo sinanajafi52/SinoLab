@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -751,6 +752,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="dashboard-layout">
         <!-- Sidebar -->
@@ -823,7 +825,8 @@
                     <!-- Calibration Warning -->
                     <div id="calibWarning" class="calib-warning hidden">
                         <span class="calib-warning-icon">⚠️</span>
-                        <span class="calib-warning-text">Calibration Required - Please calibrate and set Tube ID first to enable Flow control.</span>
+                        <span class="calib-warning-text">Calibration Required - Please calibrate and set Tube ID first
+                            to enable Flow control.</span>
                     </div>
 
                     <!-- Pump Control Card -->
@@ -835,12 +838,14 @@
                                 <div class="rpm-controls">
                                     <button type="button" id="rpmMinus" class="rpm-btn">−</button>
                                     <div class="rpm-value-box">
-                                        <input type="number" id="rpmInput" class="rpm-value-input" value="100" min="0" max="400" inputmode="numeric">
+                                        <input type="number" id="rpmInput" class="rpm-value-input" value="100" min="0"
+                                            max="400" inputmode="numeric">
                                     </div>
                                     <button type="button" id="rpmPlus" class="rpm-btn">+</button>
                                 </div>
                                 <div class="rpm-slider-container">
-                                    <input type="range" id="rpmSlider" class="rpm-slider" min="0" max="400" step="10" value="100">
+                                    <input type="range" id="rpmSlider" class="rpm-slider" min="0" max="400" step="10"
+                                        value="100">
                                     <div class="rpm-range">
                                         <span>0</span>
                                         <span>400</span>
@@ -853,7 +858,8 @@
                                 <div class="pump-section-label">Flow (ml/min)</div>
                                 <div id="flowDisplayBox" class="flow-display-box">
                                     <span id="flowValue" class="flow-value">--</span>
-                                    <input type="number" id="flowInput" class="flow-input hidden" min="0.1" step="0.1" placeholder="0.00" inputmode="decimal">
+                                    <input type="number" id="flowInput" class="flow-input hidden" min="0.1" step="0.1"
+                                        placeholder="0.00" inputmode="decimal">
                                 </div>
                             </div>
 
@@ -927,8 +933,10 @@
                         <div class="control-group">
                             <label class="control-label">Speed (RPM)</label>
                             <div class="input-with-slider">
-                                <input type="number" id="dispenseRpmInput" class="control-input" min="10" max="400" value="100" inputmode="numeric">
-                                <input type="range" id="dispenseRpmSlider" class="control-slider" min="10" max="400" step="10" value="100">
+                                <input type="number" id="dispenseRpmInput" class="control-input" min="10" max="400"
+                                    value="100" inputmode="numeric">
+                                <input type="range" id="dispenseRpmSlider" class="control-slider" min="10" max="400"
+                                    step="10" value="100">
                             </div>
                             <span class="input-hint">Range: 10-400 RPM</span>
                         </div>
@@ -936,12 +944,14 @@
                         <div class="control-row">
                             <div class="control-group">
                                 <label class="control-label">On Time (sec)</label>
-                                <input type="number" id="dispenseOnTime" class="control-input" min="0.1" max="10" step="0.1" value="1" inputmode="decimal">
+                                <input type="number" id="dispenseOnTime" class="control-input" min="0.1" max="10"
+                                    step="0.1" value="1" inputmode="decimal">
                                 <span class="input-hint">Max: 10 sec</span>
                             </div>
                             <div class="control-group">
                                 <label class="control-label">Off Time (sec)</label>
-                                <input type="number" id="dispenseOffTime" class="control-input" min="0" max="10" step="0.1" value="0" inputmode="decimal">
+                                <input type="number" id="dispenseOffTime" class="control-input" min="0" max="10"
+                                    step="0.1" value="0" inputmode="decimal">
                                 <span class="input-hint">Max: 10 sec</span>
                             </div>
                         </div>
@@ -951,11 +961,9 @@
                             <div class="direction-toggle">
                                 <button type="button" id="dispenseRpmDirCW" class="direction-toggle-btn active">
                                     <span>↻</span>
-                                    <span>CW</span>
                                 </button>
                                 <button type="button" id="dispenseRpmDirCCW" class="direction-toggle-btn">
                                     <span>↺</span>
-                                    <span>CCW</span>
                                 </button>
                             </div>
                         </div>
@@ -969,19 +977,23 @@
                     <div id="volumeDispensePanel" class="pump-control-card dispense-panel">
                         <div id="dispenseWarning" class="calib-warning">
                             <span class="calib-warning-icon">⚠️</span>
-                            <span class="calib-warning-text">Calibration Required - Please set tube size and calibrate from the device first.</span>
+                            <span class="calib-warning-text">Calibration Required - Please set tube size and calibrate
+                                from the device first.</span>
                         </div>
 
-                        <p class="panel-description">Dispense a specific volume of liquid. Speed is auto-calculated based on calibration.</p>
+                        <p class="panel-description">Dispense a specific volume of liquid. Speed is auto-calculated
+                            based on calibration.</p>
 
                         <div class="control-group">
                             <label class="control-label">Target Volume (mL)</label>
-                            <input type="number" id="volumeInput" class="control-input" min="0.1" step="0.1" placeholder="Enter volume" inputmode="decimal">
+                            <input type="number" id="volumeInput" class="control-input" min="0.1" step="0.1"
+                                placeholder="Enter volume" inputmode="decimal">
                         </div>
 
                         <div class="control-group">
                             <label class="control-label">Off Time Between Cycles (sec)</label>
-                            <input type="number" id="volumeOffTime" class="control-input" min="0" max="10" step="0.1" value="0" inputmode="decimal">
+                            <input type="number" id="volumeOffTime" class="control-input" min="0" max="10" step="0.1"
+                                value="0" inputmode="decimal">
                             <span class="input-hint">Max: 10 sec (0 = continuous)</span>
                         </div>
 
@@ -990,11 +1002,9 @@
                             <div class="direction-toggle">
                                 <button type="button" id="volumeDirCW" class="direction-toggle-btn active">
                                     <span>↻</span>
-                                    <span>CW</span>
                                 </button>
                                 <button type="button" id="volumeDirCCW" class="direction-toggle-btn">
                                     <span>↺</span>
-                                    <span>CCW</span>
                                 </button>
                             </div>
                         </div>
@@ -1100,7 +1110,8 @@
                                 <span class="info-value" id="settingsAntiDrip">--</span>
                             </div>
                         </div>
-                        <p class="info-note">ℹ️ Calibration settings can only be changed from the device's physical controls.</p>
+                        <p class="info-note">ℹ️ Calibration settings can only be changed from the device's physical
+                            controls.</p>
                     </div>
                 </div>
             </div>
@@ -1125,4 +1136,5 @@
         });
     </script>
 </body>
+
 </html>

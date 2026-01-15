@@ -1078,6 +1078,7 @@ function checkCalibration() {
     }
 
     updateEstimatedTime();
+    updateFlowDisplay();
 }
 
 /**

@@ -443,9 +443,9 @@ function updateFlowDisplay() {
         el.flowInput.value = flow > 0 ? flow.toFixed(2) : '';
     }
 
-    // Toggle editable mode based on calibration
+    // Toggle editable mode based on calibration and running state
     if (el.flowDisplayBox) {
-        if (isCalibrated) {
+        if (isCalibrated && !isPumpRunning) {
             el.flowDisplayBox.classList.add('editable');
         } else {
             el.flowDisplayBox.classList.remove('editable');
@@ -581,22 +581,50 @@ function setPumpRunning(running) {
 
     // Enable/disable controls based on running state
     setControlsEnabled(!running);
+    updateFlowDisplay();
+    updateControlsState();
 }
 
 function setControlsEnabled(enabled) {
-    // RPM controls - always allow UI interaction, check online when sending command
-    if (el.rpmMinus) el.rpmMinus.disabled = !enabled;
-    if (el.rpmPlus) el.rpmPlus.disabled = !enabled;
-    if (el.rpmInput) el.rpmInput.disabled = !enabled;
-    if (el.rpmSlider) el.rpmSlider.disabled = !enabled;
+    const disabled = !enabled;
+
+    // RPM Controls
+    if (el.rpmMinus) el.rpmMinus.disabled = disabled;
+    if (el.rpmPlus) el.rpmPlus.disabled = disabled;
+    if (el.rpmInput) el.rpmInput.disabled = disabled;
+    if (el.rpmSlider) el.rpmSlider.disabled = disabled;
 
     // Direction control
-    if (el.directionBtn) el.directionBtn.disabled = !enabled;
+    if (el.directionBtn) el.directionBtn.disabled = disabled;
 
-    // Start/Stop button - enabled unless pump is running
-    // Online check happens when button is clicked
+    // Flow Input
+    if (el.flowInput) el.flowInput.disabled = disabled;
+
+    // RPM Dispense Inputs
+    if (el.dispenseRpmInput) el.dispenseRpmInput.disabled = disabled;
+    if (el.dispenseRpmSlider) el.dispenseRpmSlider.disabled = disabled;
+    if (el.dispenseOnTime) el.dispenseOnTime.disabled = disabled;
+    if (el.dispenseOffTime) el.dispenseOffTime.disabled = disabled;
+
+    // Volume Dispense Inputs
+    if (el.volumeInput) el.volumeInput.disabled = disabled;
+    if (el.volumeOffTime) el.volumeOffTime.disabled = disabled;
+
+    // Dispense Direction Toggles (disable click events via class or pointer-events)
+    const toggles = [
+        el.dispenseRpmDirCW, el.dispenseRpmDirCCW,
+        el.volumeDirCW, el.volumeDirCCW
+    ];
+    toggles.forEach(t => {
+        if (t) {
+            t.style.pointerEvents = disabled ? 'none' : 'auto';
+            t.style.opacity = disabled ? '0.5' : '1';
+        }
+    });
+
+    // Start/Stop button - ALWAYS enabled so user can STOP
     if (el.startStopBtn) {
-        el.startStopBtn.disabled = false; // Always clickable
+        el.startStopBtn.disabled = false;
     }
 }
 
@@ -689,6 +717,7 @@ async function dispenseRpmBased() {
         Utils.hideLoading();
         Utils.showSuccess(`Running at ${rpm} RPM for ${onTime}s`);
     } catch (error) {
+        setPumpRunning(false);
         Utils.hideLoading();
         console.error('Error starting dispense:', error);
         Utils.showError('Failed to start dispense');
@@ -825,6 +854,7 @@ async function preFlush() {
         Utils.hideLoading();
         Utils.showSuccess('Pre-flush started');
     } catch (error) {
+        setPumpRunning(false);
         Utils.hideLoading();
         console.error('Error starting pre-flush:', error);
         Utils.showError('Failed to start pre-flush');
@@ -890,7 +920,11 @@ function updateStatusUI() {
     deviceOnlineStatus = deviceStatus.online === true;
 
     // Update pump running state from device
-    const running = deviceStatus.pumpRunning === true;
+    // CRITICAL: If device is offline, assume it's NOT running to prevent UI getting stuck
+    let running = false;
+    if (deviceOnlineStatus) {
+        running = deviceStatus.pumpRunning === true;
+    }
     setPumpRunning(running);
 
     // Current RPM display

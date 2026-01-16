@@ -266,20 +266,59 @@ function setupEventHandlers() {
         el.rpmDispenseBtn.addEventListener('click', dispenseRpmBased);
     }
 
-    // Flow input handler - independent from RPM
+    // Flow input handler - with validation based on calibration
     if (el.flowInput) {
         el.flowInput.addEventListener('focus', () => {
             switchInputMode('flow');
         });
         el.flowInput.addEventListener('input', (e) => {
-            // Just store the flow value - don't convert to RPM
+            // Store raw value while typing
             targetFlow = parseFloat(e.target.value) || 0;
         });
         el.flowInput.addEventListener('change', (e) => {
-            // Validate on change
-            const val = Math.max(0, parseFloat(e.target.value) || 0);
-            targetFlow = val;
-            e.target.value = val > 0 ? val : '';
+            // Validate and clamp to achievable range on blur/enter
+            const mlPerRev = deviceSettings?.mlPerRev || 0;
+            const maxRPM = 400;
+            const minRPM = 1;
+
+            if (mlPerRev <= 0) {
+                // Not calibrated - can't validate properly
+                e.target.value = '';
+                targetFlow = 0;
+                return;
+            }
+
+            // Calculate flow limits
+            const maxFlow = maxRPM * mlPerRev;
+            const minFlow = minRPM * mlPerRev;
+
+            let val = parseFloat(e.target.value) || 0;
+
+            if (val <= 0) {
+                e.target.value = '';
+                targetFlow = 0;
+                return;
+            }
+
+            // Clamp to valid range
+            val = Math.min(maxFlow, Math.max(minFlow, val));
+
+            // Calculate the actual RPM this would require
+            const calculatedRPM = Math.round(val / mlPerRev);
+
+            // Recalculate the actual achievable flow (nearest valid value)
+            const actualFlow = calculatedRPM * mlPerRev;
+
+            targetFlow = actualFlow;
+            e.target.value = actualFlow.toFixed(2);
+
+            // Also update the RPM display to show corresponding value
+            if (el.rpmInput) {
+                el.rpmInput.value = calculatedRPM;
+            }
+            if (el.rpmSlider) {
+                el.rpmSlider.value = calculatedRPM;
+            }
         });
     }
 

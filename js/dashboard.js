@@ -593,7 +593,7 @@ function stopFlowTracking() {
 }
 
 function updateTotalFlowDisplay() {
-    if (!isPumpRunning || !pumpStartTime || !isCalibrated) {
+    if (!isPumpRunning || !pumpStartTime) {
         if (el.totalFlowValue) {
             el.totalFlowValue.textContent = '0.000';
         }
@@ -601,9 +601,11 @@ function updateTotalFlowDisplay() {
     }
 
     const mlPerRev = deviceSettings?.mlPerRev || 0;
-    const currentRPM = deviceStatus?.currentRPM || 0;
+    // Use targetRPM (what user set) or currentRPM from device as fallback
+    const rpmValue = targetRPM || deviceStatus?.currentRPM || 0;
 
-    if (mlPerRev <= 0 || currentRPM <= 0) {
+    if (mlPerRev <= 0 || rpmValue <= 0) {
+        console.log('Flow calc skipped: mlPerRev=', mlPerRev, 'rpmValue=', rpmValue);
         return;
     }
 
@@ -613,7 +615,7 @@ function updateTotalFlowDisplay() {
     const elapsedMin = elapsedMs / 60000;
 
     // Total mL = flow rate * time
-    sessionFlowMl = currentRPM * mlPerRev * elapsedMin;
+    sessionFlowMl = rpmValue * mlPerRev * elapsedMin;
 
     // Convert to Liters and display with 3 decimals
     const sessionLiters = sessionFlowMl / 1000;
@@ -626,22 +628,72 @@ function updateTotalFlowDisplay() {
 // ========================================
 // TUBE CHANGE MANAGEMENT
 // ========================================
-async function confirmTubeChange() {
+
+// Runtime tracking variables
+let pumpRuntimeStart = null;
+let runtimeUpdateInterval = null;
+
+function confirmTubeChange() {
     if (!currentDeviceId) {
         Utils.showWarning('No device connected');
         return;
     }
 
-    const confirmed = confirm('Are you sure you want to record a tube change? This will reset the runtime counter.');
+    // Show custom confirmation modal
+    showTubeChangeModal();
+}
 
-    if (!confirmed) return;
+function showTubeChangeModal() {
+    // Create modal backdrop
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.id = 'tubeChangeModal';
+    backdrop.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-icon">🔧</div>
+            <h3 class="modal-title">Confirm Tube Change</h3>
+            <p class="modal-message">Are you sure you have changed the tube? This will reset the runtime counter.</p>
+            <div class="modal-actions">
+                <button class="btn btn-outline modal-btn-no" id="tubeChangeNo">No</button>
+                <button class="btn btn-primary modal-btn-yes" id="tubeChangeYes">Yes</button>
+            </div>
+        </div>
+    `;
 
+    document.body.appendChild(backdrop);
+
+    // Add event listeners
+    document.getElementById('tubeChangeNo').addEventListener('click', () => {
+        closeTubeChangeModal();
+    });
+
+    document.getElementById('tubeChangeYes').addEventListener('click', async () => {
+        await saveTubeChange();
+        closeTubeChangeModal();
+    });
+
+    // Close on backdrop click
+    backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) {
+            closeTubeChangeModal();
+        }
+    });
+}
+
+function closeTubeChangeModal() {
+    const modal = document.getElementById('tubeChangeModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+async function saveTubeChange() {
     try {
         const now = Date.now();
 
         await FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance').set({
             lastTubeChange: now,
-            runtimeSinceChange: 0
+            runtimeSeconds: 0
         });
 
         Utils.showSuccess('Tube change recorded successfully');
@@ -653,10 +705,59 @@ async function confirmTubeChange() {
     }
 }
 
+// Start tracking runtime when pump starts
+function startRuntimeTracking() {
+    pumpRuntimeStart = Date.now();
+
+    // Update runtime every 10 seconds
+    if (runtimeUpdateInterval) clearInterval(runtimeUpdateInterval);
+    runtimeUpdateInterval = setInterval(() => {
+        updateRuntimeInDB();
+    }, 10000); // Update every 10 seconds
+}
+
+// Stop tracking and save final runtime
+function stopRuntimeTracking() {
+    if (runtimeUpdateInterval) {
+        clearInterval(runtimeUpdateInterval);
+        runtimeUpdateInterval = null;
+    }
+
+    // Save final runtime
+    if (pumpRuntimeStart) {
+        updateRuntimeInDB();
+        pumpRuntimeStart = null;
+    }
+}
+
+// Update runtime in database
+async function updateRuntimeInDB() {
+    if (!currentDeviceId || !pumpRuntimeStart) return;
+
+    try {
+        const maintenance = deviceSettings?.maintenance || {};
+        const currentRuntime = maintenance.runtimeSeconds || 0;
+
+        // Calculate elapsed seconds since pump started
+        const elapsedSeconds = Math.floor((Date.now() - pumpRuntimeStart) / 1000);
+
+        // Update database with new total
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance/runtimeSeconds').set(
+            currentRuntime + elapsedSeconds
+        );
+
+        // Reset start time for next interval
+        pumpRuntimeStart = Date.now();
+
+    } catch (error) {
+        console.error('Error updating runtime:', error);
+    }
+}
+
 function updateTubeMaintenanceUI() {
     const maintenance = deviceSettings?.maintenance || {};
-    const lastTubeChange = maintenance.lastTubeChange || deviceInfo?.lastTubeChange || 0;
-    const runtimeSinceChange = maintenance.runtimeSinceChange || deviceInfo?.runtimeSinceChange || 0;
+    const lastTubeChange = maintenance.lastTubeChange || 0;
+    const runtimeSeconds = maintenance.runtimeSeconds || 0;
 
     if (el.infoLastTubeChange) {
         if (lastTubeChange > 0) {
@@ -673,14 +774,10 @@ function updateTubeMaintenanceUI() {
     }
 
     if (el.infoRuntimeSinceChange) {
-        if (runtimeSinceChange > 0) {
-            // Convert seconds to readable format
-            const hours = Math.floor(runtimeSinceChange / 3600);
-            const minutes = Math.floor((runtimeSinceChange % 3600) / 60);
-            el.infoRuntimeSinceChange.textContent = `${hours}h ${minutes}m`;
-        } else {
-            el.infoRuntimeSinceChange.textContent = '0h 0m';
-        }
+        // Convert seconds to readable format
+        const hours = Math.floor(runtimeSeconds / 3600);
+        const minutes = Math.floor((runtimeSeconds % 3600) / 60);
+        el.infoRuntimeSinceChange.textContent = `${hours}h ${minutes}m`;
     }
 }
 
@@ -829,11 +926,13 @@ function setPumpRunning(running) {
     updateFlowDisplay();
     updateControlsState();
 
-    // Start/stop real-time flow tracking
+    // Start/stop real-time flow tracking and runtime tracking
     if (running) {
         startFlowTracking();
+        startRuntimeTracking();
     } else {
         stopFlowTracking();
+        stopRuntimeTracking();
     }
 }
 

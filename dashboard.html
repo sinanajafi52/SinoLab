@@ -1446,19 +1446,30 @@
                 </div>
 
                 <div class="page-content">
-                    <!-- Session Stats -->
+                    <!-- Tube Maintenance -->
                     <div class="info-section">
-                        <h3 class="info-section-title">📊 Session Statistics</h3>
+                        <h3 class="info-section-title">🔧 Tube Maintenance</h3>
                         <div class="info-card">
                             <div class="info-row">
-                                <span class="info-label">Session Volume</span>
-                                <span class="info-value" id="infoSessionVolume">0.00 mL</span>
+                                <span class="info-label">Last Tube Change</span>
+                                <span class="info-value" id="infoLastTubeChange">Not recorded</span>
                             </div>
                             <div class="info-row">
-                                <span class="info-label">Total Dispensed</span>
-                                <span class="info-value" id="infoTotalDispensed">0.00 mL</span>
+                                <span class="info-label">Runtime Since Change</span>
+                                <span class="info-value" id="infoRuntimeSinceChange">--</span>
                             </div>
                         </div>
+                        <div class="info-actions">
+                            <button id="confirmTubeChangeBtn" class="btn btn-outline btn-full">
+                                ✅ Confirm Tube Change
+                            </button>
+                            <p class="info-hint">Click to record a new tube installation</p>
+                        </div>
+                    </div>
+
+                    <!-- Pre-Flush -->
+                    <div class="info-section">
+                        <h3 class="info-section-title">🚿 Pre-Flush</h3>
                         <div class="info-actions">
                             <button id="preFlushBtn" class="btn btn-primary btn-full">
                                 🚿 Pre-Flush

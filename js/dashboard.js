@@ -19,6 +19,11 @@ let targetFlow = 0;  // Separate flow value
 let inputMode = 'rpm';  // 'rpm' or 'flow' - which control is active
 let dispenseMode = 'rpm'; // 'rpm' or 'volume'
 
+// Real-time flow calculation
+let pumpStartTime = null;  // When pump started running
+let sessionFlowMl = 0;     // Accumulated flow in mL for current session
+let flowUpdateInterval = null; // Interval for updating flow display
+
 // Firebase listeners
 let statusListener = null;
 let settingsListener = null;
@@ -127,9 +132,10 @@ function cacheElements() {
     el.estimatedTime = document.getElementById('estimatedTime');
     el.volumeDispenseBtn = document.getElementById('volumeDispenseBtn');
 
-    // System Info - Session Stats
-    el.infoSessionVolume = document.getElementById('infoSessionVolume');
-    el.infoTotalDispensed = document.getElementById('infoTotalDispensed');
+    // System Info - Tube Maintenance
+    el.infoLastTubeChange = document.getElementById('infoLastTubeChange');
+    el.infoRuntimeSinceChange = document.getElementById('infoRuntimeSinceChange');
+    el.confirmTubeChangeBtn = document.getElementById('confirmTubeChangeBtn');
     el.preFlushBtn = document.getElementById('preFlushBtn');
 
     // System Info - Device
@@ -354,6 +360,11 @@ function setupEventHandlers() {
     if (el.preFlushBtn) {
         el.preFlushBtn.addEventListener('click', preFlush);
     }
+
+    // Tube Change confirmation button
+    if (el.confirmTubeChangeBtn) {
+        el.confirmTubeChangeBtn.addEventListener('click', confirmTubeChange);
+    }
 }
 
 // ========================================
@@ -550,6 +561,130 @@ function updateFlowDisplay() {
 }
 
 // ========================================
+// REAL-TIME TOTAL FLOW CALCULATION
+// ========================================
+function startFlowTracking() {
+    if (flowUpdateInterval) return; // Already tracking
+
+    pumpStartTime = Date.now();
+    sessionFlowMl = 0;
+
+    // Update every 100ms for smooth display
+    flowUpdateInterval = setInterval(() => {
+        updateTotalFlowDisplay();
+    }, 100);
+
+    updateTotalFlowDisplay();
+}
+
+function stopFlowTracking() {
+    if (flowUpdateInterval) {
+        clearInterval(flowUpdateInterval);
+        flowUpdateInterval = null;
+    }
+
+    // Reset to zero when pump stops
+    sessionFlowMl = 0;
+    pumpStartTime = null;
+
+    if (el.totalFlowValue) {
+        el.totalFlowValue.textContent = '0.000';
+    }
+}
+
+function updateTotalFlowDisplay() {
+    if (!isPumpRunning || !pumpStartTime || !isCalibrated) {
+        if (el.totalFlowValue) {
+            el.totalFlowValue.textContent = '0.000';
+        }
+        return;
+    }
+
+    const mlPerRev = deviceSettings?.mlPerRev || 0;
+    const currentRPM = deviceStatus?.currentRPM || 0;
+
+    if (mlPerRev <= 0 || currentRPM <= 0) {
+        return;
+    }
+
+    // Calculate flow rate: mL/min = RPM * mlPerRev
+    // Time elapsed in minutes
+    const elapsedMs = Date.now() - pumpStartTime;
+    const elapsedMin = elapsedMs / 60000;
+
+    // Total mL = flow rate * time
+    sessionFlowMl = currentRPM * mlPerRev * elapsedMin;
+
+    // Convert to Liters and display with 3 decimals
+    const sessionLiters = sessionFlowMl / 1000;
+
+    if (el.totalFlowValue) {
+        el.totalFlowValue.textContent = sessionLiters.toFixed(3);
+    }
+}
+
+// ========================================
+// TUBE CHANGE MANAGEMENT
+// ========================================
+async function confirmTubeChange() {
+    if (!currentDeviceId) {
+        Utils.showWarning('No device connected');
+        return;
+    }
+
+    const confirmed = confirm('Are you sure you want to record a tube change? This will reset the runtime counter.');
+
+    if (!confirmed) return;
+
+    try {
+        const now = Date.now();
+
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance').set({
+            lastTubeChange: now,
+            runtimeSinceChange: 0
+        });
+
+        Utils.showSuccess('Tube change recorded successfully');
+        updateTubeMaintenanceUI();
+
+    } catch (error) {
+        console.error('Error recording tube change:', error);
+        Utils.showError('Failed to record tube change');
+    }
+}
+
+function updateTubeMaintenanceUI() {
+    const maintenance = deviceSettings?.maintenance || {};
+    const lastTubeChange = maintenance.lastTubeChange || deviceInfo?.lastTubeChange || 0;
+    const runtimeSinceChange = maintenance.runtimeSinceChange || deviceInfo?.runtimeSinceChange || 0;
+
+    if (el.infoLastTubeChange) {
+        if (lastTubeChange > 0) {
+            el.infoLastTubeChange.textContent = new Date(lastTubeChange).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } else {
+            el.infoLastTubeChange.textContent = 'Not recorded';
+        }
+    }
+
+    if (el.infoRuntimeSinceChange) {
+        if (runtimeSinceChange > 0) {
+            // Convert seconds to readable format
+            const hours = Math.floor(runtimeSinceChange / 3600);
+            const minutes = Math.floor((runtimeSinceChange % 3600) / 60);
+            el.infoRuntimeSinceChange.textContent = `${hours}h ${minutes}m`;
+        } else {
+            el.infoRuntimeSinceChange.textContent = '0h 0m';
+        }
+    }
+}
+
+// ========================================
 // START/STOP PUMP
 // ========================================
 async function togglePump() {
@@ -693,6 +828,13 @@ function setPumpRunning(running) {
     setControlsEnabled(!running);
     updateFlowDisplay();
     updateControlsState();
+
+    // Start/stop real-time flow tracking
+    if (running) {
+        startFlowTracking();
+    } else {
+        stopFlowTracking();
+    }
 }
 
 function setControlsEnabled(enabled) {
@@ -996,6 +1138,7 @@ function subscribeToDevice() {
     infoListener = deviceRef.child('info').on('value', (snapshot) => {
         deviceInfo = snapshot.val() || {};
         updateInfoUI();
+        updateTubeMaintenanceUI();
     });
 
     // Control node updates (for mode and acknowledged)
@@ -1008,6 +1151,15 @@ function subscribeToDevice() {
         if (controlData.acknowledged === true) {
             hideButtonLoading();
         }
+    });
+
+    // Maintenance updates (for tube change tracking)
+    deviceRef.child('maintenance').on('value', (snapshot) => {
+        const maintenanceData = snapshot.val() || {};
+        // Store in deviceSettings for easy access
+        if (!deviceSettings) deviceSettings = {};
+        deviceSettings.maintenance = maintenanceData;
+        updateTubeMaintenanceUI();
     });
 
     console.log('Subscribed to device:', currentDeviceId);
@@ -1051,28 +1203,13 @@ function updateStatusUI() {
     // Control mode - now from control node, not status
     // (updateControlModeUI handles this)
 
-    // Session dispensed (show 0 if device resets it)
+    // Session dispensed (for status page info display)
     const sessionMl = deviceStatus.sessionDispensed || 0;
     if (el.sessionDispensed) {
         el.sessionDispensed.textContent = `${sessionMl.toFixed(1)} mL`;
     }
-    // Also update in System Info page
-    if (el.infoSessionVolume) {
-        el.infoSessionVolume.textContent = `${sessionMl.toFixed(2)} mL`;
-    }
 
-    // Total flow - use sessionVolumeLiters from status node (value is in Liters)
-    // Parse it as float to ensure toFixed works
-    let totalLiters = parseFloat(deviceStatus.sessionVolumeLiters);
-    if (isNaN(totalLiters)) totalLiters = 0;
-
-    if (el.totalFlowValue) {
-        el.totalFlowValue.textContent = totalLiters.toFixed(3);
-    }
-    // Also update in System Info page
-    if (el.infoTotalDispensed) {
-        el.infoTotalDispensed.textContent = `${totalLiters.toFixed(3)} L`;
-    }
+    // Note: Total Flow is now calculated in real-time by updateTotalFlowDisplay()
 
     // Last updated
     if (el.lastUpdated) {

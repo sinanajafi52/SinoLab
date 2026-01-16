@@ -216,6 +216,7 @@ h3 { font-size: 1.25rem; }
 .sidebar {
     width: var(--sidebar-width);
     min-width: var(--sidebar-width);
+    max-width: var(--sidebar-width);
     background-color: var(--bg-sidebar);
     border-right: 1px solid var(--border-color);
     display: flex;
@@ -225,20 +226,23 @@ h3 { font-size: 1.25rem; }
     left: 0;
     height: 100vh;
     z-index: 100;
+    overflow-x: hidden;
 }
 
 .sidebar-header {
-    padding: var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-sm);
     border-bottom: 1px solid var(--border-color);
+    overflow: hidden;
 }
 
 .sidebar-logo {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     font-weight: 700;
     color: var(--text-primary);
+    white-space: nowrap;
 }
 
 .sidebar-logo-icon {
@@ -265,18 +269,20 @@ h3 { font-size: 1.25rem; }
 .sidebar-nav-item {
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm);
     width: 100%;
-    padding: var(--spacing-md) var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-md);
     background: none;
     border: none;
     border-left: 3px solid transparent;
     color: var(--text-secondary);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-family: inherit;
     cursor: pointer;
     transition: all var(--transition-fast);
     text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
 }
 
 .sidebar-nav-item:hover {
@@ -301,8 +307,9 @@ h3 { font-size: 1.25rem; }
 }
 
 .sidebar-footer {
-    padding: var(--spacing-md) var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-sm);
     border-top: 1px solid var(--border-color);
+    overflow: hidden;
 }
 
 .sidebar-device-info {
@@ -310,16 +317,23 @@ h3 { font-size: 1.25rem; }
     flex-direction: column;
     gap: var(--spacing-xs);
     margin-bottom: var(--spacing-md);
+    overflow: hidden;
 }
 
 .sidebar-device-id {
     font-family: monospace;
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .sidebar-connection {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .sidebar-connection.connecting { color: var(--accent-orange); }

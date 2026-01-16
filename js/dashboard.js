@@ -15,6 +15,8 @@ let isPumpRunning = false;
 let deviceOnlineStatus = false;  // Renamed to avoid conflict with device.js isDeviceOnline function
 let currentDirection = 'CW'; // CW or CCW
 let targetRPM = 100;
+let targetFlow = 0;  // Separate flow value
+let inputMode = 'rpm';  // 'rpm' or 'flow' - which control is active
 let dispenseMode = 'rpm'; // 'rpm' or 'volume'
 
 // Firebase listeners
@@ -151,11 +153,12 @@ function cacheElements() {
 // EVENT HANDLERS
 // ========================================
 function setupEventHandlers() {
-    // RPM Controls
+    // RPM Controls - switch to RPM mode when interacting
     if (el.rpmMinus) {
         el.rpmMinus.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            switchInputMode('rpm');
             adjustRPM(-10);
         });
     }
@@ -163,10 +166,14 @@ function setupEventHandlers() {
         el.rpmPlus.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            switchInputMode('rpm');
             adjustRPM(10);
         });
     }
     if (el.rpmInput) {
+        el.rpmInput.addEventListener('focus', () => {
+            switchInputMode('rpm');
+        });
         el.rpmInput.addEventListener('change', (e) => {
             const val = Math.min(400, Math.max(0, parseInt(e.target.value) || 0));
             setRPM(val);
@@ -174,15 +181,18 @@ function setupEventHandlers() {
     }
     if (el.rpmSlider) {
         el.rpmSlider.addEventListener('input', (e) => {
+            switchInputMode('rpm');
             setRPM(parseInt(e.target.value));
         });
     }
 
-    // Flow display box click - show calibration message if not calibrated
+    // Flow input - switch to Flow mode when interacting
     if (el.flowDisplayBox) {
         el.flowDisplayBox.addEventListener('click', () => {
             if (!isCalibrated) {
                 Utils.showWarning('Please set tube size and calibrate from the device first.');
+            } else {
+                switchInputMode('flow');
             }
         });
     }
@@ -256,20 +266,20 @@ function setupEventHandlers() {
         el.rpmDispenseBtn.addEventListener('click', dispenseRpmBased);
     }
 
-    // Flow input handler (when calibrated, user can edit flow to set RPM)
+    // Flow input handler - independent from RPM
     if (el.flowInput) {
-        el.flowInput.addEventListener('input', (e) => {
-            const flow = parseFloat(e.target.value) || 0;
-            const mlPerRev = deviceSettings?.mlPerRev || 0;
-            if (mlPerRev > 0 && flow > 0) {
-                // RPM = Flow / mlPerRev
-                const rpm = Math.min(400, Math.max(0, Math.round(flow / mlPerRev)));
-                setRPM(rpm);
-            }
+        el.flowInput.addEventListener('focus', () => {
+            switchInputMode('flow');
         });
-        el.flowInput.addEventListener('blur', () => {
-            // Update display when leaving input
-            updateFlowDisplay();
+        el.flowInput.addEventListener('input', (e) => {
+            // Just store the flow value - don't convert to RPM
+            targetFlow = parseFloat(e.target.value) || 0;
+        });
+        el.flowInput.addEventListener('change', (e) => {
+            // Validate on change
+            const val = Math.max(0, parseFloat(e.target.value) || 0);
+            targetFlow = val;
+            e.target.value = val > 0 ? val : '';
         });
     }
 
@@ -427,35 +437,75 @@ function updateDirectionDisplay() {
 }
 
 // ========================================
-// FLOW CALCULATION
+// INPUT MODE SWITCHING (RPM vs Flow)
 // ========================================
-function updateFlowDisplay() {
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
-    const flow = (mlPerRev > 0 && targetRPM > 0) ? targetRPM * mlPerRev : 0;
-
-    // Update flow display value
-    if (el.flowValue) {
-        el.flowValue.textContent = flow > 0 ? flow.toFixed(2) : '--';
+function switchInputMode(mode) {
+    if (!isCalibrated && mode === 'flow') {
+        return; // Can't switch to flow mode if not calibrated
     }
 
-    // Update flow input value
-    if (el.flowInput) {
-        el.flowInput.value = flow > 0 ? flow.toFixed(2) : '';
-    }
+    inputMode = mode;
+    updateInputModeDisplay();
+}
 
-    // Toggle editable mode based on calibration and running state
-    if (el.flowDisplayBox) {
-        if (isCalibrated && !isPumpRunning) {
-            el.flowDisplayBox.classList.add('editable');
-            // Remove hidden class from input (it has !important so CSS can't override)
-            if (el.flowInput) el.flowInput.classList.remove('hidden');
-            if (el.flowValue) el.flowValue.classList.add('hidden');
-        } else {
+function updateInputModeDisplay() {
+    const rpmSection = document.querySelector('.pump-section:has(#rpmInput)')?.parentElement?.querySelector('.pump-section:first-child');
+    const flowSection = el.flowDisplayBox?.closest('.pump-section');
+
+    if (inputMode === 'rpm') {
+        // RPM mode - show RPM controls, show flow as display only
+        if (el.rpmMinus) el.rpmMinus.style.opacity = '1';
+        if (el.rpmPlus) el.rpmPlus.style.opacity = '1';
+        if (el.rpmInput) el.rpmInput.style.opacity = '1';
+        if (el.rpmSlider) el.rpmSlider.style.opacity = '1';
+
+        // Flow shows calculated value (read-only display)
+        if (el.flowDisplayBox) {
             el.flowDisplayBox.classList.remove('editable');
             if (el.flowInput) el.flowInput.classList.add('hidden');
             if (el.flowValue) el.flowValue.classList.remove('hidden');
         }
+
+        // Update flow display from RPM
+        const mlPerRev = deviceSettings?.mlPerRev || 0;
+        const flow = (mlPerRev > 0 && targetRPM > 0) ? targetRPM * mlPerRev : 0;
+        if (el.flowValue) {
+            el.flowValue.textContent = flow > 0 ? flow.toFixed(2) : '--';
+        }
+    } else {
+        // Flow mode - dim RPM controls, show flow as editable
+        if (el.rpmMinus) el.rpmMinus.style.opacity = '0.4';
+        if (el.rpmPlus) el.rpmPlus.style.opacity = '0.4';
+        if (el.rpmInput) el.rpmInput.style.opacity = '0.4';
+        if (el.rpmSlider) el.rpmSlider.style.opacity = '0.4';
+
+        // Flow is editable
+        if (el.flowDisplayBox && isCalibrated && !isPumpRunning) {
+            el.flowDisplayBox.classList.add('editable');
+            if (el.flowInput) {
+                el.flowInput.classList.remove('hidden');
+                el.flowInput.value = targetFlow > 0 ? targetFlow : '';
+            }
+            if (el.flowValue) el.flowValue.classList.add('hidden');
+        }
     }
+}
+
+// ========================================
+// FLOW CALCULATION
+// ========================================
+function updateFlowDisplay() {
+    // Only auto-update flow from RPM when in RPM mode
+    if (inputMode === 'rpm') {
+        const mlPerRev = deviceSettings?.mlPerRev || 0;
+        const flow = (mlPerRev > 0 && targetRPM > 0) ? targetRPM * mlPerRev : 0;
+
+        if (el.flowValue) {
+            el.flowValue.textContent = flow > 0 ? flow.toFixed(2) : '--';
+        }
+    }
+
+    updateInputModeDisplay();
 }
 
 // ========================================
@@ -476,9 +526,23 @@ async function startPump() {
         return;
     }
 
-    if (targetRPM <= 0) {
-        Utils.showWarning('Please set RPM higher than 0');
-        return;
+    // Calculate RPM based on input mode
+    let rpmToUse = targetRPM;
+
+    if (inputMode === 'flow') {
+        // Convert flow to RPM
+        const mlPerRev = deviceSettings?.mlPerRev || 0;
+        if (mlPerRev > 0 && targetFlow > 0) {
+            rpmToUse = Math.min(400, Math.max(1, Math.round(targetFlow / mlPerRev)));
+        } else {
+            Utils.showWarning('Please set Flow higher than 0');
+            return;
+        }
+    } else {
+        if (rpmToUse <= 0) {
+            Utils.showWarning('Please set RPM higher than 0');
+            return;
+        }
     }
 
     // Optimistic UI update first for responsiveness
@@ -487,7 +551,7 @@ async function startPump() {
     try {
         await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
             command: 'START',
-            rpm: targetRPM,
+            rpm: rpmToUse,
             direction: currentDirection,
             onTime: 0,
             offTime: 0,

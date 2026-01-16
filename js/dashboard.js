@@ -443,9 +443,9 @@ function updateFlowDisplay() {
         el.flowInput.value = flow > 0 ? flow.toFixed(2) : '';
     }
 
-    // Toggle editable mode based on calibration
+    // Toggle editable mode based on calibration and running state
     if (el.flowDisplayBox) {
-        if (isCalibrated) {
+        if (isCalibrated && !isPumpRunning) {
             el.flowDisplayBox.classList.add('editable');
             // Remove hidden class from input (it has !important so CSS can't override)
             if (el.flowInput) el.flowInput.classList.remove('hidden');
@@ -549,6 +549,28 @@ function setPumpRunning(running) {
         }
     }
 
+    // Update Dispense buttons (RPM Mode)
+    if (el.rpmDispenseBtn) {
+        if (running) {
+            el.rpmDispenseBtn.textContent = '⏹ Stop';
+            el.rpmDispenseBtn.classList.add('running');
+        } else {
+            el.rpmDispenseBtn.textContent = '💧 Dispense';
+            el.rpmDispenseBtn.classList.remove('running');
+        }
+    }
+
+    // Update Dispense buttons (Volume Mode)
+    if (el.volumeDispenseBtn) {
+        if (running) {
+            el.volumeDispenseBtn.textContent = '⏹ Stop';
+            el.volumeDispenseBtn.classList.add('running');
+        } else {
+            el.volumeDispenseBtn.textContent = '💧 Dispense';
+            el.volumeDispenseBtn.classList.remove('running');
+        }
+    }
+
     // Update status display
     if (el.pumpStatus) {
         if (running) {
@@ -564,22 +586,50 @@ function setPumpRunning(running) {
 
     // Enable/disable controls based on running state
     setControlsEnabled(!running);
+    updateFlowDisplay();
+    updateControlsState();
 }
 
 function setControlsEnabled(enabled) {
-    // RPM controls - always allow UI interaction, check online when sending command
-    if (el.rpmMinus) el.rpmMinus.disabled = !enabled;
-    if (el.rpmPlus) el.rpmPlus.disabled = !enabled;
-    if (el.rpmInput) el.rpmInput.disabled = !enabled;
-    if (el.rpmSlider) el.rpmSlider.disabled = !enabled;
+    const disabled = !enabled;
+
+    // RPM Controls
+    if (el.rpmMinus) el.rpmMinus.disabled = disabled;
+    if (el.rpmPlus) el.rpmPlus.disabled = disabled;
+    if (el.rpmInput) el.rpmInput.disabled = disabled;
+    if (el.rpmSlider) el.rpmSlider.disabled = disabled;
 
     // Direction control
-    if (el.directionBtn) el.directionBtn.disabled = !enabled;
+    if (el.directionBtn) el.directionBtn.disabled = disabled;
 
-    // Start/Stop button - enabled unless pump is running
-    // Online check happens when button is clicked
+    // Flow Input
+    if (el.flowInput) el.flowInput.disabled = disabled;
+
+    // RPM Dispense Inputs
+    if (el.dispenseRpmInput) el.dispenseRpmInput.disabled = disabled;
+    if (el.dispenseRpmSlider) el.dispenseRpmSlider.disabled = disabled;
+    if (el.dispenseOnTime) el.dispenseOnTime.disabled = disabled;
+    if (el.dispenseOffTime) el.dispenseOffTime.disabled = disabled;
+
+    // Volume Dispense Inputs
+    if (el.volumeInput) el.volumeInput.disabled = disabled;
+    if (el.volumeOffTime) el.volumeOffTime.disabled = disabled;
+
+    // Dispense Direction Toggles (disable click events via class or pointer-events)
+    const toggles = [
+        el.dispenseRpmDirCW, el.dispenseRpmDirCCW,
+        el.volumeDirCW, el.volumeDirCCW
+    ];
+    toggles.forEach(t => {
+        if (t) {
+            t.style.pointerEvents = disabled ? 'none' : 'auto';
+            t.style.opacity = disabled ? '0.5' : '1';
+        }
+    });
+
+    // Start/Stop button - ALWAYS enabled so user can STOP
     if (el.startStopBtn) {
-        el.startStopBtn.disabled = false; // Always clickable
+        el.startStopBtn.disabled = false;
     }
 }
 
@@ -587,18 +637,26 @@ function setControlsEnabled(enabled) {
  * Update controls state based on device online status and calibration
  */
 function updateControlsState() {
-    // Pre-Flush button - show warning on click if offline
+    // Pre-Flush button - always clickable to enable stop functionality
     if (el.preFlushBtn) {
-        el.preFlushBtn.disabled = isPumpRunning;
+        if (isPumpRunning) {
+            el.preFlushBtn.textContent = '⏹ Stop';
+            el.preFlushBtn.classList.add('running');
+        } else {
+            el.preFlushBtn.textContent = '🚿 Pre-Flush';
+            el.preFlushBtn.classList.remove('running');
+        }
+        el.preFlushBtn.disabled = false;
     }
 
     // Dispense buttons
+    // Allow clicking dispense buttons while running to enable "Stop" functionality
     if (el.rpmDispenseBtn) {
-        el.rpmDispenseBtn.disabled = isPumpRunning;
+        el.rpmDispenseBtn.disabled = false;
     }
     if (el.volumeDispenseBtn) {
-        // Volume dispense requires calibration
-        el.volumeDispenseBtn.disabled = isPumpRunning || !isCalibrated;
+        // Volume dispense requires calibration, but we allow stop if running
+        el.volumeDispenseBtn.disabled = (!isPumpRunning && !isCalibrated);
     }
 
     // Update calibration warning visibility
@@ -615,7 +673,13 @@ function updateControlsState() {
 // RPM-BASED DISPENSE
 // ========================================
 async function dispenseRpmBased() {
-    if (!currentDeviceId || isPumpRunning) return;
+    if (!currentDeviceId) return;
+
+    // If pump is running, this button acts as Stop
+    if (isPumpRunning) {
+        await stopPump();
+        return;
+    }
 
     const rpm = parseInt(el.dispenseRpmInput?.value) || 100;
     const onTime = parseFloat(el.dispenseOnTime?.value) || 1;
@@ -658,6 +722,7 @@ async function dispenseRpmBased() {
         Utils.hideLoading();
         Utils.showSuccess(`Running at ${rpm} RPM for ${onTime}s`);
     } catch (error) {
+        setPumpRunning(false);
         Utils.hideLoading();
         console.error('Error starting dispense:', error);
         Utils.showError('Failed to start dispense');
@@ -713,7 +778,7 @@ async function dispenseVolume() {
     }
 
     if (isPumpRunning) {
-        Utils.showWarning('Pump is already running');
+        await stopPump();
         return;
     }
 
@@ -759,10 +824,11 @@ async function dispenseVolume() {
 // PRE-FLUSH
 // ========================================
 async function preFlush() {
-    if (!currentDeviceId || isPumpRunning) {
-        if (isPumpRunning) {
-            Utils.showWarning('Pump is already running');
-        }
+    if (!currentDeviceId) return;
+
+    // If pump is running, this button acts as Stop
+    if (isPumpRunning) {
+        await stopPump();
         return;
     }
 
@@ -793,6 +859,7 @@ async function preFlush() {
         Utils.hideLoading();
         Utils.showSuccess('Pre-flush started');
     } catch (error) {
+        setPumpRunning(false);
         Utils.hideLoading();
         console.error('Error starting pre-flush:', error);
         Utils.showError('Failed to start pre-flush');
@@ -1021,6 +1088,7 @@ function checkCalibration() {
     }
 
     updateEstimatedTime();
+    updateFlowDisplay();
 }
 
 /**

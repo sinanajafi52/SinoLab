@@ -297,6 +297,7 @@ h3 {
     flex: 1;
     padding: var(--spacing-md) 0;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .sidebar-nav-item {

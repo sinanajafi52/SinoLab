@@ -1061,14 +1061,14 @@ function updateStatusUI() {
         el.infoSessionVolume.textContent = `${sessionMl.toFixed(2)} mL`;
     }
 
-    // Total flow - use totalLiters from board (value is already in mL)
-    const totalMl = deviceStatus.totalLiters || 0;
+    // Total flow - use sessionVolumeLiters from status node (value is in Liters)
+    const totalLiters = deviceStatus.sessionVolumeLiters || 0;
     if (el.totalFlowValue) {
-        el.totalFlowValue.textContent = totalMl.toFixed(2);
+        el.totalFlowValue.textContent = totalLiters.toFixed(3);
     }
     // Also update in System Info page
     if (el.infoTotalDispensed) {
-        el.infoTotalDispensed.textContent = `${totalMl.toFixed(2)} mL`;
+        el.infoTotalDispensed.textContent = `${totalLiters.toFixed(3)} L`;
     }
 
     // Last updated

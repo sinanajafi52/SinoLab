@@ -25,6 +25,10 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
     <style>
+        body {
+            overflow-x: hidden;
+        }
+
         /* ========================================
            PREMIUM UI DESIGN SYSTEM
            ======================================== */
@@ -1100,22 +1104,48 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <span class="sidebar-logo-icon">🔬</span>
+                    <span class="sidebar-logo-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                            viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <path d="M10 2h4" />
+                            <path d="M12 2v4" />
+                            <path d="m5 13 4 8h6l4-8" />
+                            <path d="M5 13V9a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v4" />
+                            <path d="m9 21-3-7" />
+                            <path d="m15 21 3-7" />
+                        </svg></span>
                     <span class="sidebar-logo-text">SinoLab</span>
                 </div>
             </div>
 
             <nav class="sidebar-nav">
                 <button class="sidebar-nav-item active" data-page="status">
-                    <span class="sidebar-nav-icon">📊</span>
+                    <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="9" rx="1" />
+                            <rect x="14" y="3" width="7" height="5" rx="1" />
+                            <rect x="14" y="12" width="7" height="9" rx="1" />
+                            <rect x="3" y="16" width="7" height="5" rx="1" />
+                        </svg></span>
                     <span class="sidebar-nav-text">Status</span>
                 </button>
                 <button class="sidebar-nav-item" data-page="dispense">
-                    <span class="sidebar-nav-icon">💧</span>
+                    <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                        </svg></span>
                     <span class="sidebar-nav-text">Dispense</span>
                 </button>
                 <button class="sidebar-nav-item" data-page="system">
-                    <span class="sidebar-nav-icon">ℹ️</span>
+                    <span class="sidebar-nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="16" x2="12" y2="12" />
+                            <line x1="12" y1="8" x2="12.01" y2="8" />
+                        </svg></span>
                     <span class="sidebar-nav-text">System Info</span>
                 </button>
             </nav>
@@ -1126,8 +1156,19 @@
                     <span id="sidebarConnectionStatus" class="sidebar-connection connecting">Connecting...</span>
                 </div>
                 <div class="sidebar-actions">
-                    <button id="changeDeviceBtn" class="sidebar-action-btn" title="Change Device">📱</button>
-                    <button id="logoutBtn" class="sidebar-action-btn" title="Logout">🚪</button>
+                    <button id="changeDeviceBtn" class="sidebar-action-btn" title="Change Device"><svg
+                            xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                            <line x1="12" y1="18" x2="12.01" y2="18" />
+                        </svg></button>
+                    <button id="logoutBtn" class="sidebar-action-btn" title="Logout"><svg
+                            xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                            <polyline points="16 17 21 12 16 7" />
+                            <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg></button>
                 </div>
             </div>
         </aside>

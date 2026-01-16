@@ -4,7 +4,7 @@
  */
 
 // Cache version - update this when deploying new versions
-const CACHE_VERSION = 'v1.0.0';
+const CACHE_VERSION = 'v1.0.1';
 const CACHE_NAME = `frogpump-${CACHE_VERSION}`;
 
 // Files to cache for offline use

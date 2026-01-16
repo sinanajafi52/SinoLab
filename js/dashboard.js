@@ -485,6 +485,8 @@ function updateInputModeDisplay() {
             if (el.flowInput) {
                 el.flowInput.classList.remove('hidden');
                 el.flowInput.value = targetFlow > 0 ? targetFlow : '';
+                // Auto-focus flow input so user can start typing
+                setTimeout(() => el.flowInput.focus(), 50);
             }
             if (el.flowValue) el.flowValue.classList.add('hidden');
         }

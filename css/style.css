@@ -342,11 +342,12 @@ h3 { font-size: 1.25rem; }
 
 .sidebar-actions {
     display: flex;
-    gap: var(--spacing-sm);
+    gap: 6px;
 }
 
 .sidebar-action-btn {
     flex: 1;
+    max-width: 50%;
     padding: var(--spacing-sm);
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
@@ -355,6 +356,10 @@ h3 { font-size: 1.25rem; }
     font-size: 1rem;
     cursor: pointer;
     transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
 }
 
 .sidebar-action-btn:hover {

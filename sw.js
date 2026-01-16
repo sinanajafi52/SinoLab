@@ -116,6 +116,11 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    // Skip chrome-extension and other non-http(s) schemes
+    if (!url.protocol.startsWith('http')) {
+        return;
+    }
+
     // Handle navigation requests (HTML pages)
     if (request.mode === 'navigate') {
         event.respondWith(
@@ -201,8 +206,8 @@ self.addEventListener('fetch', (event) => {
 function isStaticAsset(url) {
     const staticExtensions = ['.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2'];
     return staticExtensions.some(ext => url.pathname.endsWith(ext)) ||
-           url.pathname === '/' ||
-           url.pathname.endsWith('.html');
+        url.pathname === '/' ||
+        url.pathname.endsWith('.html');
 }
 
 /**
@@ -210,20 +215,30 @@ function isStaticAsset(url) {
  */
 function isExternalResource(url) {
     return url.hostname === 'fonts.googleapis.com' ||
-           url.hostname === 'fonts.gstatic.com';
+        url.hostname === 'fonts.gstatic.com';
 }
 
 /**
  * Fetch resource and cache it
  */
 function fetchAndCache(request) {
+    // Skip non-http(s) requests
+    if (!request.url.startsWith('http')) {
+        return fetch(request);
+    }
+
     return fetch(request)
         .then((response) => {
             if (response.ok) {
                 const responseClone = response.clone();
                 caches.open(CACHE_NAME).then((cache) => {
-                    cache.put(request, responseClone);
-                });
+                    // Only cache http(s) requests
+                    try {
+                        cache.put(request, responseClone);
+                    } catch (e) {
+                        console.warn('[SW] Could not cache:', request.url);
+                    }
+                }).catch(() => { });
             }
             return response;
         })

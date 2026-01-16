@@ -443,11 +443,11 @@ function updateFlowDisplay() {
         el.flowInput.value = flow > 0 ? flow.toFixed(2) : '';
     }
 
-    // Toggle editable mode based on calibration and running state
+    // Toggle editable mode based on calibration only (allow editing even when running)
     if (el.flowDisplayBox) {
-        if (isCalibrated && !isPumpRunning) {
+        if (isCalibrated) {
             el.flowDisplayBox.classList.add('editable');
-            // Remove hidden class from input (it has !important so CSS can't override)
+            // Remove hidden class from input
             if (el.flowInput) el.flowInput.classList.remove('hidden');
             if (el.flowValue) el.flowValue.classList.add('hidden');
         } else {

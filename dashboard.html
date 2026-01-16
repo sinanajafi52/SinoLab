@@ -1029,6 +1029,8 @@
             backdrop-filter: blur(15px);
             border-right: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+            overflow-x: hidden;
+            overflow-y: auto;
         }
 
         .sidebar-header {
@@ -1039,8 +1041,8 @@
 
         .sidebar-nav-item {
             position: relative;
-            margin: 6px 16px;
-            padding: 14px 16px;
+            margin: 6px 12px;
+            padding: 12px 14px;
             border-radius: 12px;
             border-left: none;
             overflow: hidden;
@@ -1094,6 +1096,24 @@
             background: rgba(0, 0, 0, 0.3);
             backdrop-filter: blur(5px);
             border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            overflow: hidden;
+        }
+
+        .sidebar-actions {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .sidebar-action-btn {
+            flex: 1;
+            min-width: 0;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
     </style>
 </head>

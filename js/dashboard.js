@@ -447,8 +447,13 @@ function updateFlowDisplay() {
     if (el.flowDisplayBox) {
         if (isCalibrated) {
             el.flowDisplayBox.classList.add('editable');
+            // Remove hidden class from input (it has !important so CSS can't override)
+            if (el.flowInput) el.flowInput.classList.remove('hidden');
+            if (el.flowValue) el.flowValue.classList.add('hidden');
         } else {
             el.flowDisplayBox.classList.remove('editable');
+            if (el.flowInput) el.flowInput.classList.add('hidden');
+            if (el.flowValue) el.flowValue.classList.remove('hidden');
         }
     }
 }
@@ -852,9 +857,19 @@ function updateStatusUI() {
     // Update device online state
     deviceOnlineStatus = deviceStatus.online === true;
 
-    // Update pump running state from device
-    const running = deviceStatus.pumpRunning === true;
-    setPumpRunning(running);
+    // Update pump running state from device - only trust if device is online
+    // and data is fresh (within 60 seconds)
+    const lastUpdated = deviceStatus.lastUpdated || 0;
+    const isDataFresh = (Date.now() - lastUpdated) < 60000; // 60 seconds
+
+    if (deviceOnlineStatus && isDataFresh) {
+        const running = deviceStatus.pumpRunning === true;
+        setPumpRunning(running);
+    } else if (!deviceOnlineStatus) {
+        // Device is offline - assume pump is stopped
+        setPumpRunning(false);
+    }
+    // If data is stale but device claims online, keep current UI state
 
     // Current RPM display
     if (el.currentRPM) {
@@ -874,9 +889,8 @@ function updateStatusUI() {
         el.infoSessionVolume.textContent = `${sessionMl.toFixed(2)} mL`;
     }
 
-    // Total flow - use totalLiters from board (in liters, convert to mL)
-    const totalLiters = deviceStatus.totalLiters || 0;
-    const totalMl = totalLiters * 1000;  // Convert liters to mL
+    // Total flow - use totalLiters from board (value is already in mL)
+    const totalMl = deviceStatus.totalLiters || 0;
     if (el.totalFlowValue) {
         el.totalFlowValue.textContent = totalMl.toFixed(2);
     }

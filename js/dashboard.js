@@ -623,6 +623,9 @@ function updateTotalFlowDisplay() {
     if (el.totalFlowValue) {
         el.totalFlowValue.textContent = sessionLiters.toFixed(3);
     }
+
+    // Update runtime display as well
+    updateTubeMaintenanceUI();
 }
 
 // ========================================
@@ -757,7 +760,15 @@ async function updateRuntimeInDB() {
 function updateTubeMaintenanceUI() {
     const maintenance = deviceSettings?.maintenance || {};
     const lastTubeChange = maintenance.lastTubeChange || 0;
-    const runtimeSeconds = maintenance.runtimeSeconds || 0;
+
+    // Base runtime from DB
+    let totalSeconds = maintenance.runtimeSeconds || 0;
+
+    // Add volatile elapsed time if running
+    if (isPumpRunning && pumpRuntimeStart) {
+        const elapsed = Math.floor((Date.now() - pumpRuntimeStart) / 1000);
+        totalSeconds += elapsed;
+    }
 
     if (el.infoLastTubeChange) {
         if (lastTubeChange > 0) {
@@ -775,9 +786,10 @@ function updateTubeMaintenanceUI() {
 
     if (el.infoRuntimeSinceChange) {
         // Convert seconds to readable format
-        const hours = Math.floor(runtimeSeconds / 3600);
-        const minutes = Math.floor((runtimeSeconds % 3600) / 60);
-        el.infoRuntimeSinceChange.textContent = `${hours}h ${minutes}m`;
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = Math.floor(totalSeconds % 60);
+        el.infoRuntimeSinceChange.textContent = `${hours}h ${minutes}m ${seconds}s`;
     }
 }
 

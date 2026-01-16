@@ -23,6 +23,7 @@ let dispenseMode = 'rpm'; // 'rpm' or 'volume'
 let pumpStartTime = null;  // When pump started running
 let sessionFlowMl = 0;     // Accumulated flow in mL for current session
 let flowUpdateInterval = null; // Interval for updating flow display
+let currentFlowRate = 0;   // Current flow rate in mL/min
 
 // Firebase listeners
 let statusListener = null;
@@ -552,9 +553,14 @@ function updateFlowDisplay() {
         const mlPerRev = deviceSettings?.mlPerRev || 0;
         const flow = (mlPerRev > 0 && targetRPM > 0) ? targetRPM * mlPerRev : 0;
 
+        currentFlowRate = flow; // Store for total calculation
+
         if (el.flowValue) {
             el.flowValue.textContent = flow > 0 ? flow.toFixed(2) : '--';
         }
+    } else {
+        // In flow mode, use targetFlow
+        currentFlowRate = targetFlow;
     }
 
     updateInputModeDisplay();
@@ -600,22 +606,16 @@ function updateTotalFlowDisplay() {
         return;
     }
 
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
-    // Use targetRPM (what user set) or currentRPM from device as fallback
-    const rpmValue = targetRPM || deviceStatus?.currentRPM || 0;
-
-    if (mlPerRev <= 0 || rpmValue <= 0) {
-        console.log('Flow calc skipped: mlPerRev=', mlPerRev, 'rpmValue=', rpmValue);
+    if (currentFlowRate <= 0) {
         return;
     }
 
-    // Calculate flow rate: mL/min = RPM * mlPerRev
     // Time elapsed in minutes
     const elapsedMs = Date.now() - pumpStartTime;
     const elapsedMin = elapsedMs / 60000;
 
-    // Total mL = flow rate * time
-    sessionFlowMl = rpmValue * mlPerRev * elapsedMin;
+    // Total mL = flow rate (mL/min) * time (min)
+    sessionFlowMl = currentFlowRate * elapsedMin;
 
     // Convert to Liters and display with 3 decimals
     const sessionLiters = sessionFlowMl / 1000;

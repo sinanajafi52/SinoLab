@@ -1062,7 +1062,10 @@ function updateStatusUI() {
     }
 
     // Total flow - use sessionVolumeLiters from status node (value is in Liters)
-    const totalLiters = deviceStatus.sessionVolumeLiters || 0;
+    // Parse it as float to ensure toFixed works
+    let totalLiters = parseFloat(deviceStatus.sessionVolumeLiters);
+    if (isNaN(totalLiters)) totalLiters = 0;
+
     if (el.totalFlowValue) {
         el.totalFlowValue.textContent = totalLiters.toFixed(3);
     }

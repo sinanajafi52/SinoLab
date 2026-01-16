@@ -304,7 +304,7 @@ h3 {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-    width: 100%;
+    /* width: 100%; - Removed to prevent overflow with margins */
     padding: var(--spacing-md) var(--spacing-md);
     background: none;
     border: none;

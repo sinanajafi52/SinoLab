@@ -45,16 +45,19 @@ const el = {};
 // INITIALIZATION
 // ========================================
 function initDashboard() {
-    console.log('Initializing dashboard...');
+    console.log('🚀 initDashboard started');
 
     currentDeviceId = Utils.getSavedDeviceId();
+    console.log('📱 Device ID:', currentDeviceId);
+
     if (!currentDeviceId) {
         Utils.navigateTo('device.html');
         return;
     }
 
+    console.log('🔐 Calling Auth.initProtectedPage...');
     Auth.initProtectedPage(async (user) => {
-        console.log('Auth ready, initializing UI...');
+        console.log('✅ Auth callback fired, user:', user?.uid);
 
         cacheElements();
         setupEventHandlers();

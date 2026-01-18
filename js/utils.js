@@ -8,7 +8,7 @@
 // ========================================
 
 // Device ID validation regex
-const DEVICE_ID_REGEX = /^FROG-[A-Z0-9]{6,}$/;
+const DEVICE_ID_REGEX = /^FROG-[A-F0-9]{6}$/;
 
 // LocalStorage keys
 const STORAGE_KEYS = {

@@ -4,7 +4,7 @@
  * Device ID: FROG-TEST38
  */
 
-const TEST_DEVICE_ID = 'FROG-TEST38';
+const TEST_DEVICE_ID = 'FROG-AA00BB';
 
 const Simulator = {
     heartbeatInterval: null,

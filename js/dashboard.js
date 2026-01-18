@@ -36,6 +36,10 @@ let identityListener = null;
 let maintenanceListener = null;
 let connectionListener = null;
 
+// Lock System
+let activeControllerListener = null;
+let currentAuthUser = null;
+
 // Control state (Removed controlMode as it's no longer used)
 
 // UI Elements
@@ -58,6 +62,7 @@ function initDashboard() {
     console.log('🔐 Calling Auth.initProtectedPage...');
     Auth.initProtectedPage(async (user) => {
         console.log('✅ Auth callback fired, user:', user?.uid);
+        currentAuthUser = user;
 
         cacheElements();
         setupEventHandlers();
@@ -163,6 +168,11 @@ function cacheElements() {
     el.settingsCalibrationType = document.getElementById('settingsCalibrationType');
     el.settingsLastCalibrated = document.getElementById('settingsLastCalibrated');
     el.settingsAntiDrip = document.getElementById('settingsAntiDrip');
+
+    // Lock Modal
+    el.userLockModal = document.getElementById('userLockModal');
+    el.lockUserEmail = document.getElementById('lockUserEmail');
+    el.exitDashboardBtn = document.getElementById('exitDashboardBtn');
 }
 
 // ========================================
@@ -371,6 +381,13 @@ function setupEventHandlers() {
     // Tube Change confirmation button
     if (el.confirmTubeChangeBtn) {
         el.confirmTubeChangeBtn.addEventListener('click', confirmTubeChange);
+    }
+
+    // Exit on Lock
+    if (el.exitDashboardBtn) {
+        el.exitDashboardBtn.addEventListener('click', () => {
+            Utils.navigateTo('device.html');
+        });
     }
 }
 
@@ -1272,7 +1289,10 @@ function subscribeToDevice() {
     });
 
     // Connection updates
-    // Connection updates
+
+    // 1. Monitor Active Controller (The Lock System)
+    monitorActiveController(deviceRef);
+
     // Force initial state to offline to clear "Connecting..."
     updateConnectionStatus(false);
 
@@ -1533,12 +1553,76 @@ function hideButtonLoading() {
 }
 
 // ========================================
+// CONTROLLER LOCK SYSTEM
+// ========================================
+function monitorActiveController(deviceRef) {
+    if (!currentAuthUser) return;
+
+    const controllerRef = deviceRef.child('activeController');
+    const myUid = currentAuthUser.uid;
+    const myEmail = currentAuthUser.email || 'Unknown User';
+
+    activeControllerListener = controllerRef.on('value', (snapshot) => {
+        const controller = snapshot.val();
+
+        if (!controller) {
+            // Case 1: No one is controlling. Claim it!
+            console.log('🔓 Device free. Claiming control...');
+            controllerRef.set({
+                uid: myUid,
+                email: myEmail,
+                startTime: Date.now()
+            }).then(() => {
+                // IMPORTANT: Set onDisconnect to remove lock if we crash/close
+                controllerRef.onDisconnect().remove();
+            });
+            handleControllerLock(false);
+        } else if (controller.uid === myUid) {
+            // Case 2: I am the controller. All good.
+            // Ensure onDisconnect is still set (in case of reconnect)
+            controllerRef.onDisconnect().remove();
+            handleControllerLock(false);
+        } else {
+            // Case 3: Someone else is controlling. LOCK UI.
+            console.warn(`⛔ Device locked by ${controller.email}`);
+            handleControllerLock(true, controller.email);
+        }
+    });
+}
+
+function handleControllerLock(isLocked, lockedByEmail = '') {
+    if (!el.userLockModal) return;
+
+    if (isLocked) {
+        // Show blocking modal
+        if (el.lockUserEmail) el.lockUserEmail.textContent = lockedByEmail;
+        el.userLockModal.classList.add('active');
+    } else {
+        // Hide modal
+        el.userLockModal.classList.remove('active');
+    }
+}
+
+// ========================================
 // CLEANUP
 // ========================================
 function cleanup() {
     if (!currentDeviceId) return;
     const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
 
+    // Release lock if we own it
+    if (currentAuthUser) {
+        // Check if we are the current controller before removing (optimistic check)
+        // Actually onDisconnect handles the crash case, but for clean navigation:
+        deviceRef.child('activeController').once('value', snapshot => {
+            const val = snapshot.val();
+            if (val && val.uid === currentAuthUser.uid) {
+                deviceRef.child('activeController').remove();
+            }
+        });
+    }
+
+    if (activeControllerListener) deviceRef.child('activeController').off('value', activeControllerListener);
     if (liveStatusListener) deviceRef.child('liveStatus').off('value', liveStatusListener);
     if (tubeConfigListener) deviceRef.child('tubeConfig').off('value', tubeConfigListener);
     if (identityListener) deviceRef.child('identity').off('value', identityListener);

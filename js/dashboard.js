@@ -145,7 +145,6 @@ function cacheElements() {
     el.infoLastTubeChange = document.getElementById('infoLastTubeChange');
     el.infoRuntimeSinceChange = document.getElementById('infoRuntimeSinceChange');
     el.confirmTubeChangeBtn = document.getElementById('confirmTubeChangeBtn');
-    el.preFlushBtn = document.getElementById('preFlushBtn');
 
     // System Info - Device
     el.infoDeviceName = document.getElementById('infoDeviceName');
@@ -365,10 +364,7 @@ function setupEventHandlers() {
         el.volumeDispenseBtn.addEventListener('click', dispenseVolume);
     }
 
-    // Pre-Flush button
-    if (el.preFlushBtn) {
-        el.preFlushBtn.addEventListener('click', preFlush);
-    }
+
 
     // Tube Change confirmation button
     if (el.confirmTubeChangeBtn) {
@@ -647,6 +643,7 @@ function updateTotalFlowDisplay() {
 // Runtime tracking variables
 let pumpRuntimeStart = null;
 let runtimeUpdateInterval = null;
+let localUiInterval = null;
 
 function confirmTubeChange() {
     if (!currentDeviceId) {
@@ -721,14 +718,22 @@ async function saveTubeChange() {
 }
 
 // Start tracking runtime when pump starts
+// Start tracking runtime when pump starts
 function startRuntimeTracking() {
     pumpRuntimeStart = Date.now();
 
-    // Update runtime every 10 seconds
+    // DB Update every 10 seconds
     if (runtimeUpdateInterval) clearInterval(runtimeUpdateInterval);
     runtimeUpdateInterval = setInterval(() => {
         updateRuntimeInDB();
     }, 10000);
+
+    // Local UI update every 1 second
+    if (localUiInterval) clearInterval(localUiInterval);
+    localUiInterval = setInterval(() => {
+        updateTubeMaintenanceUI();
+        updateMaintenanceInfo();
+    }, 1000);
 }
 
 // Stop tracking and save final runtime
@@ -737,12 +742,20 @@ function stopRuntimeTracking() {
         clearInterval(runtimeUpdateInterval);
         runtimeUpdateInterval = null;
     }
+    if (localUiInterval) {
+        clearInterval(localUiInterval);
+        localUiInterval = null;
+    }
 
     // Save final runtime
     if (pumpRuntimeStart) {
         updateRuntimeInDB();
         pumpRuntimeStart = null;
     }
+
+    // Final UI update
+    updateTubeMaintenanceUI();
+    updateMaintenanceInfo();
 }
 
 // Update runtime in database
@@ -1022,17 +1035,7 @@ function setControlsEnabled(enabled) {
  * Update controls state based on device online status and calibration
  */
 function updateControlsState() {
-    // Pre-Flush button - always clickable to enable stop functionality
-    if (el.preFlushBtn) {
-        if (isPumpRunning) {
-            el.preFlushBtn.textContent = '⏹ Stop';
-            el.preFlushBtn.classList.add('running');
-        } else {
-            el.preFlushBtn.textContent = '🚿 Pre-Flush';
-            el.preFlushBtn.classList.remove('running');
-        }
-        el.preFlushBtn.disabled = false;
-    }
+
 
     // Dispense buttons
     // Allow clicking dispense buttons while running to enable "Stop" functionality
@@ -1213,47 +1216,6 @@ async function dispenseVolume() {
 }
 
 // ========================================
-// PRE-FLUSH
-// ========================================
-async function preFlush() {
-    if (!currentDeviceId) return;
-
-    // If pump is running, this button acts as Stop
-    if (isPumpRunning) {
-        await stopPump();
-        return;
-    }
-
-    // Check if device is online
-    if (!deviceOnlineStatus) {
-        Utils.showWarning('Device is offline');
-        return;
-    }
-
-    try {
-        Utils.showLoading('Starting pre-flush...');
-
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
-            activeMode: 'PREFLUSH',
-            acknowledged: false,
-            lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: new Date().toISOString()
-        });
-
-        // Optimistic UI update
-        setPumpRunning(true);
-
-        Utils.hideLoading();
-        Utils.showSuccess('Pre-flush started');
-    } catch (error) {
-        setPumpRunning(false);
-        Utils.hideLoading();
-        console.error('Error starting pre-flush:', error);
-        Utils.showError('Failed to start pre-flush');
-    }
-}
-
-// ========================================
 // FIREBASE SUBSCRIPTIONS
 // ========================================
 function subscribeToDevice() {
@@ -1419,7 +1381,14 @@ function updateMaintenanceInfo() {
 
     // Runtime from maintenance node (total)
     if (el.infoRuntime) {
-        const totalSeconds = maintenance.totalRuntimeSeconds || 0;
+        let totalSeconds = maintenance.totalRuntimeSeconds || 0;
+
+        // Add volatile elapsed time if running
+        if (isPumpRunning && pumpRuntimeStart) {
+            const elapsed = Math.floor((Date.now() - pumpRuntimeStart) / 1000);
+            totalSeconds += elapsed;
+        }
+
         const hours = totalSeconds / 3600;
         el.infoRuntime.textContent = `${hours.toFixed(1)} hours`;
     }

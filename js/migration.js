@@ -72,9 +72,8 @@ window.Migration = {
         if (data.maintenance) {
             updates['maintenance'] = {
                 lastTubeChange: data.maintenance.lastTubeChange || 0,
-                tubeRuntimeSeconds: data.maintenance.runtimeSeconds || 0, // Rename
-                totalRuntimeSeconds: data.maintenance.runtimeSeconds || 0, // Init with same val
-                preFlushEnabled: false
+                tubeRuntimeSeconds: data.maintenance.runtimeSeconds || 0,
+                totalRuntimeSeconds: data.maintenance.runtimeSeconds || 0
             };
         }
 

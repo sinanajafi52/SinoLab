@@ -192,7 +192,22 @@ const Simulator = {
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
-    Auth.initAuth(() => {
-        Simulator.init();
+    // Simulate board power-up sequence
+    console.log('🔌 Powering up simulator...');
+
+    // Direct authentication (Board-style)
+    firebase.auth().onAuthStateChanged((user) => {
+        if (user) {
+            console.log('🔑 Authenticated as device:', user.uid);
+            Simulator.init();
+        } else {
+            console.log('🔒 Attempting anonymous device login...');
+            firebase.auth().signInAnonymously()
+                .catch((error) => {
+                    console.error('Login Failed:', error);
+                    document.getElementById('status').textContent = 'Auth Error: ' + error.message;
+                    Utils.showError('Could not authenticate device. Enable Anonymous Auth in Firebase Console.');
+                });
+        }
     });
 });

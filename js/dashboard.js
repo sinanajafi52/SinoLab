@@ -380,6 +380,10 @@ function setupEventHandlers() {
 // DISPENSE MODE SWITCHING
 // ========================================
 function switchDispenseMode(mode) {
+    if (isPumpRunning) {
+        showRunningLockMessage();
+        return;
+    }
     dispenseMode = mode;
 
     if (mode === 'rpm') {

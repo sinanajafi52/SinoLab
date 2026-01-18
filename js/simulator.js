@@ -70,7 +70,8 @@ const Simulator = {
             }
         };
 
-        await this.deviceRef.update(initialData);
+        // Use set() instead of update() to completely reset liveStatus
+        await this.deviceRef.set(initialData);
 
         // Load initial values into inputs
         document.getElementById('simTubeName').value = "2mm";

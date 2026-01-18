@@ -1044,41 +1044,29 @@ function setControlsEnabled(enabled) {
 function updateControlsState() {
     const isOnline = connection && connection.online;
 
-    // List of input controls to disable when offline
-    const inputsToLock = [
-        el.rpmInput,
-        el.rpmSlider,
-        el.rpmMinus,
-        el.rpmPlus,
-        el.flowInput,
-        el.directionBtn,
+    // Only lock ACTION buttons when offline, not input controls
+    // Users should be able to adjust RPM/Flow even before connecting
+    const actionButtons = [
         el.startStopBtn,
-        el.dispenseRpmSlider,
-        el.dispenseRpmInput,
-        el.dispenseOnTime,
-        el.dispenseOffTime
+        el.rpmDispenseBtn,
+        el.volumeDispenseBtn
     ];
 
-    // Disable/Enable based on connection
-    inputsToLock.forEach(input => {
-        if (input) input.disabled = !isOnline;
+    // Disable/Enable action buttons based on connection
+    actionButtons.forEach(btn => {
+        if (btn) btn.disabled = !isOnline;
     });
 
-    // Dispense tabs
+    // Dispense tabs - always enabled, but volume tab depends on calibration
     if (el.rpmModeTab) {
-        if (!isOnline) el.rpmModeTab.classList.add('disabled');
-        else el.rpmModeTab.classList.remove('disabled');
+        el.rpmModeTab.classList.remove('disabled');
     }
     // Volume tab is handled in checkCalibration
 
-    // Dispense buttons
-    // Allow clicking dispense buttons while running to enable "Stop" functionality, but only if online
-    if (el.rpmDispenseBtn) {
-        el.rpmDispenseBtn.disabled = !isOnline;
-    }
+    // Volume dispense button
     if (el.volumeDispenseBtn) {
-        // Volume dispense requires calibration, but we allow stop if running
-        el.volumeDispenseBtn.disabled = !isOnline || (!isPumpRunning && !isCalibrated);
+        // Volume dispense requires calibration AND connection
+        el.volumeDispenseBtn.disabled = !isOnline || !isCalibrated;
     }
 
     // Update calibration warning visibility
@@ -1317,14 +1305,15 @@ function updateConnectionStatus(isOnline) {
     console.log('🔄 updateConnectionStatus:', isOnline, 'El:', statusText);
 
     if (statusText) {
+        // Remove all status classes first
+        statusText.classList.remove('connecting', 'connected', 'disconnected');
+
         if (isOnline) {
             statusText.textContent = 'Online';
-            statusText.style.color = '#00ff88';
-            statusText.classList.remove('connecting');
+            statusText.classList.add('connected');
         } else {
             statusText.textContent = 'Offline';
-            statusText.style.color = '#ff4444';
-            statusText.classList.remove('connecting');
+            statusText.classList.add('disconnected');
         }
     }
     updateControlsState();

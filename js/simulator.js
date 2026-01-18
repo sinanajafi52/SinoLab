@@ -1,53 +1,64 @@
 /**
  * Frog Pump Device Simulator
  * Emulates the physical board firmware for testing purposes.
- * Device ID: FROG-TEST38678
+ * Device ID: FROG-TEST38
  */
 
-const TEST_DEVICE_ID = 'FROG-TEST38678';
+const TEST_DEVICE_ID = 'FROG-TEST38';
 
 const Simulator = {
+    heartbeatInterval: null,
+    deviceRef: null,
+    isOnline: true,
+
     async init() {
         console.log(`🚀 Starting Simulator for ${TEST_DEVICE_ID}...`);
 
-        const deviceRef = FirebaseApp.getDeviceRef(TEST_DEVICE_ID);
+        this.deviceRef = FirebaseApp.getDeviceRef(TEST_DEVICE_ID);
 
         // 1. Initialize Device Data (if missing or always to reset)
-        await this.initializeData(deviceRef);
+        await this.initializeData();
 
         // 2. Start Heartbeat Loop (Keep Online)
-        this.startHeartbeat(deviceRef);
+        this.startHeartbeat();
 
         // 3. Listen for Commands (Act like the board)
-        this.listenForCommands(deviceRef);
+        this.listenForCommands();
 
         // 4. Update UI
-        document.getElementById('status').textContent = 'Running';
+        this.updateUiStatus();
         document.getElementById('deviceId').textContent = TEST_DEVICE_ID;
+
+        // Bind UI inputs to actions
+        this.bindUiActions();
+
         Utils.showSuccess('Simulator is Online!');
     },
 
-    async initializeData(ref) {
+    async initializeData() {
         console.log('📦 Initializing Database Structure...');
 
+        // Only set if not exists, or update vital parts to ensure consistency
         const initialData = {
             identity: {
                 mac: "AA:BB:CC:DD:EE:FF",
                 firmware: "v-SIMULATOR"
             },
+            // Default config
             tubeConfig: {
-                tubeName: "Simulator Tube 3mm",
-                mlPerRev: 1.5, // Good calibration value
-                calibrationType: "advanced",
+                tubeName: "2mm",
+                mlPerRev: 1.5,
+                calibrationType: "basic",
                 lastCalibrated: Date.now(),
                 antiDrip: true
             },
-            rpmDispense: {
-                rpm: 100, onTime: 5000, offTime: 0, direction: "CW"
+            // Ensure connection node exists
+            connection: {
+                online: true,
+                ip: "127.0.0.1 (Sim)",
+                lastSeen: Date.now()
             },
-            volumeDispense: {
-                targetVolume: 100, offTime: 0, direction: "CW"
-            },
+            // Reset status
             liveStatus: {
                 activeMode: "NONE",
                 inputMode: "RPM",
@@ -56,44 +67,61 @@ const Simulator = {
                 acknowledged: true,
                 lastIssuedBy: "simulator",
                 lastUpdated: new Date().toISOString()
-            },
-            // Maintenance is managed by WebApp, but we ensure node exists
-            maintenance: {
-                lastTubeChange: Date.now(),
-                tubeRuntimeSeconds: 0,
-                totalRuntimeSeconds: 3600 // Start with 1 hour
             }
         };
 
-        // We use update to avoid overwriting existing maintenance data if we want
-        // But for a fresh test device, set is fine. Let's use update for safety.
-        await ref.update(initialData);
+        await this.deviceRef.update(initialData);
+
+        // Load initial values into inputs
+        document.getElementById('simTubeName').value = "2mm";
+        document.getElementById('simMlPerRev').value = 1.5;
+        document.getElementById('simAntiDrip').checked = true;
     },
 
-    startHeartbeat(ref) {
+    startHeartbeat() {
+        if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+
+        this.isOnline = true;
         console.log('💓 Heartbeat started...');
 
         const sendHeartbeat = () => {
+            if (!this.isOnline) return;
+
             const now = Date.now();
-            ref.child('connection').set({
+            this.deviceRef.child('connection').update({
                 online: true,
                 ip: "127.0.0.1 (Sim)",
                 lastSeen: now
             });
 
-            // Update UI
             document.getElementById('lastHeartbeat').textContent = new Date(now).toLocaleTimeString();
         };
 
-        // Send immediately then every 5s
         sendHeartbeat();
-        setInterval(sendHeartbeat, 5000);
+        this.heartbeatInterval = setInterval(sendHeartbeat, 5000); // 5s interval
+        this.updateUiStatus();
     },
 
-    listenForCommands(ref) {
+    stopHeartbeat() {
+        this.isOnline = false;
+        console.log('💔 Heartbeat stopped (Simulating Offline)...');
+        // Optionally write online: false immediately
+        this.deviceRef.child('connection').update({ online: false });
+        this.updateUiStatus();
+    },
+
+    toggleConnection() {
+        if (this.isOnline) {
+            this.stopHeartbeat();
+        } else {
+            this.startHeartbeat();
+        }
+    },
+
+    listenForCommands() {
         console.log('👂 Listening for commands...');
 
-        ref.child('liveStatus').on('value', (snapshot) => {
+        this.deviceRef.child('liveStatus').on('value', (snapshot) => {
             const status = snapshot.val();
             if (!status) return;
 
@@ -101,25 +129,69 @@ const Simulator = {
             document.getElementById('activeMode').textContent = status.activeMode;
             document.getElementById('rpm').textContent = status.currentRPM;
 
+            const ackStatus = status.acknowledged ? 'Matched (True)' : 'Pending (False)';
+            document.getElementById('ackStatus').textContent = ackStatus;
+            document.getElementById('ackStatus').style.color = status.acknowledged ? '#00ff88' : '#ffaa00';
+
             // Logic: If acknowledged is FALSE, we must process and set to TRUE
             if (status.acknowledged === false) {
                 console.log(`⚡ Command Received: ${status.activeMode}`);
 
                 // Simulate processing delay (e.g., motor spin up)
                 setTimeout(() => {
-                    ref.child('liveStatus').update({
+                    this.deviceRef.child('liveStatus').update({
                         acknowledged: true
                     });
                     console.log('✅ Command Acknowledged');
-                }, 500);
+                }, 800);
             }
         });
+    },
+
+    // ==========================================
+    // Manual Controls (Simulating Physical Menu)
+    // ==========================================
+
+    updateCalibration() {
+        const tubeName = document.getElementById('simTubeName').value;
+        const mlPerRev = parseFloat(document.getElementById('simMlPerRev').value);
+        const antiDrip = document.getElementById('simAntiDrip').checked;
+
+        this.deviceRef.child('tubeConfig').update({
+            tubeName: tubeName,
+            mlPerRev: mlPerRev,
+            antiDrip: antiDrip,
+            lastCalibrated: Date.now()
+        }).then(() => {
+            Utils.showSuccess('Tube Config Updated!');
+        });
+    },
+
+    updateUiStatus() {
+        const statusEl = document.getElementById('status');
+        const btnEl = document.getElementById('toggleConnBtn');
+
+        if (this.isOnline) {
+            statusEl.textContent = 'ONLINE';
+            statusEl.style.color = '#00ff88';
+            btnEl.textContent = '🔌 Disconnect (Go Offline)';
+            btnEl.classList.remove('btn-offline');
+        } else {
+            statusEl.textContent = 'OFFLINE';
+            statusEl.style.color = '#ff4444';
+            btnEl.textContent = '🔌 Connect (Go Online)';
+            btnEl.classList.add('btn-offline');
+        }
+    },
+
+    bindUiActions() {
+        document.getElementById('toggleConnBtn').addEventListener('click', () => this.toggleConnection());
+        document.getElementById('updateConfigBtn').addEventListener('click', () => this.updateCalibration());
     }
 };
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
-    // Wait for auth (anonymous or existing)
     Auth.initAuth(() => {
         Simulator.init();
     });

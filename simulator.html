@@ -17,18 +17,32 @@
             margin: 0;
         }
 
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+
         .card {
             background: #2d2d2d;
             padding: 2rem;
             border-radius: 16px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            width: 400px;
-            text-align: center;
+            width: 350px;
         }
 
         h1 {
             color: #00ff88;
             margin-top: 0;
+            font-size: 1.5rem;
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 1rem;
+            color: #888;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+            margin-top: 20px;
         }
 
         .status-row {
@@ -48,50 +62,146 @@
             font-family: monospace;
         }
 
-        .blink {
-            animation: blinker 1.5s linear infinite;
-            color: #00ff88;
+        .control-group {
+            margin-bottom: 15px;
         }
 
-        @keyframes blinker {
-            50% {
-                opacity: 0;
-            }
+        .control-group label {
+            display: block;
+            color: #bbb;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 8px;
+            background: #444;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #fff;
+            box-sizing: border-box;
+        }
+
+        input[type="checkbox"] {
+            transform: scale(1.5);
+            margin-right: 10px;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-toggle {
+            background: #00ff88;
+            color: #000;
+        }
+
+        .btn-toggle:hover {
+            background: #00cc6a;
+        }
+
+        .btn-offline {
+            background: #ff4444;
+            color: white;
+        }
+
+        .btn-offline:hover {
+            background: #cc0000;
+        }
+
+        .hint {
+            font-size: 0.8rem;
+            color: #666;
+            text-align: center;
+            margin-top: 20px;
         }
     </style>
 </head>
 
 <body>
 
-    <div class="card">
-        <h1>🐸 Frog Simulator</h1>
-        <p>Device Emulation Running</p>
+    <div class="container">
+        <!-- Status Panel -->
+        <div class="card">
+            <h1>🐸 Simulator Status</h1>
 
-        <div class="status-row">
-            <span class="label">Device ID:</span>
-            <span class="value" id="deviceId">Loading...</span>
-        </div>
-        <div class="status-row">
-            <span class="label">Status:</span>
-            <span class="value" id="status">Initializing...</span>
-        </div>
-        <div class="status-row">
-            <span class="label">Heartbeat:</span>
-            <span class="value" id="lastHeartbeat">--:--:--</span>
-        </div>
-        <div class="status-row">
-            <span class="label">Active Mode:</span>
-            <span class="value" id="activeMode">--</span>
-        </div>
-        <div class="status-row">
-            <span class="label">Current RPM:</span>
-            <span class="value" id="rpm">--</span>
+            <div class="status-row">
+                <span class="label">Device ID:</span>
+                <span class="value" id="deviceId">Loading...</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Connection:</span>
+                <span class="value" id="status">Initializing...</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Heartbeat:</span>
+                <span class="value" id="lastHeartbeat">--:--:--</span>
+            </div>
+
+            <h2>Live Pump State</h2>
+            <div class="status-row">
+                <span class="label">Active Mode:</span>
+                <span class="value" id="activeMode">--</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Target RPM:</span>
+                <span class="value" id="rpm">--</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Ack Status:</span>
+                <span class="value" id="ackStatus" style="font-size: 0.8rem;">--</span>
+            </div>
+
+            <button id="toggleConnBtn" class="btn-toggle">🔌 Disconnect</button>
         </div>
 
-        <p style="font-size: 0.8rem; color: #666; margin-top: 20px;">
-            Open <b>dashboard.html</b> in another tab and link to <br>
-            <b style="color:#fff">FROG-TEST38678</b>
-        </p>
+        <!-- Controls Panel -->
+        <div class="card">
+            <h1>🛠️ Device Controls</h1>
+            <p class="hint" style="margin-top: 0; margin-bottom: 20px;">Simulate physical menu actions</p>
+
+            <div class="control-group">
+                <label>Tube Size (Tube Name)</label>
+                <select id="simTubeName">
+                    <option value="None">None (Not Selected)</option>
+                    <option value="2mm">2mm Silicone</option>
+                    <option value="3mm">3mm Silicone</option>
+                    <option value="custom">Custom Tube</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Calibration Value (mL/Rev)</label>
+                <input type="number" id="simMlPerRev" step="0.01" value="1.50">
+            </div>
+
+            <div class="control-group" style="display: flex; align-items: center;">
+                <input type="checkbox" id="simAntiDrip">
+                <label style="margin: 0;">Enable Anti-Drip</label>
+            </div>
+
+            <button id="updateConfigBtn" class="btn-primary">💾 Update Configuration</button>
+            <p class="hint">Clicking this will update `tubeConfig` in DB. Watch the Web App react!</p>
+        </div>
     </div>
 
     <!-- Firebase SDKs -->

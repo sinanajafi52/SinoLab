@@ -1304,20 +1304,17 @@ function subscribeToDevice() {
  * @param {boolean} isOnline 
  */
 function updateConnectionStatus(isOnline) {
-    const statusText = document.querySelector('.sidebar-status span');
-    const statusDot = document.querySelector('.sidebar-status .status-dot');
+    const statusText = document.getElementById('sidebarConnectionStatus');
 
-    if (statusText && statusDot) {
+    if (statusText) {
         if (isOnline) {
             statusText.textContent = 'Online';
             statusText.style.color = '#00ff88';
-            statusDot.style.background = '#00ff88';
-            statusDot.style.boxShadow = '0 0 10px #00ff88';
+            statusText.classList.remove('connecting');
         } else {
             statusText.textContent = 'Offline';
             statusText.style.color = '#ff4444';
-            statusDot.style.background = '#ff4444';
-            statusDot.style.boxShadow = 'none';
+            statusText.classList.remove('connecting');
         }
     }
     updateControlsState();
@@ -1347,7 +1344,8 @@ function updateLiveStatus() {
         updateDirectionDisplay();
     }
 
-    // Current RPM display
+    // Current RPM display is purely visual (large number)
+    // We do NOT update the input field here to avoid fighting the user
     if (el.currentRPM) {
         el.currentRPM.textContent = liveStatus.currentRPM || 0;
     }
@@ -1415,10 +1413,35 @@ function updateTubeSettings() {
     checkCalibration();
 }
 
-updateFlowDisplay();
-updateMaxVolume();
-updateControlsState();
+function checkCalibration() {
+    console.log('Checking Calibration. TubeConfig:', tubeConfig);
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
+    const tubeName = tubeConfig?.tubeName || '';
+
+    // Consider calibrated if mlPerRev > 0. tubeName is less critical but good practice.
+    isCalibrated = (mlPerRev > 0);
+
+    if (el.calibWarning) {
+        el.calibWarning.classList.toggle('hidden', isCalibrated);
+    }
+
+    if (el.dispenseWarning) {
+        el.dispenseWarning.classList.toggle('hidden', isCalibrated);
+    }
+
+    if (el.volumeModeTab) {
+        el.volumeModeTab.classList.toggle('disabled', !isCalibrated);
+        // If we lost calibration while in volume mode, switch back
+        if (!isCalibrated && dispenseMode === 'volume') {
+            switchDispenseMode('rpm');
+        }
+    }
+
+    updateEstimatedTime();
+    updateFlowDisplay();
 }
+
+
 
 function updateIdentityInfo() {
     if (!identity) return;

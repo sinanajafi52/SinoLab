@@ -107,7 +107,7 @@ function cacheElements() {
     el.flowInput = document.getElementById('flowInput');
     el.directionBtn = document.getElementById('directionBtn');
     el.directionArrow = document.getElementById('directionArrow');
-    el.directionLabel = document.getElementById('directionLabel');
+
     el.totalFlowValue = document.getElementById('totalFlowValue');
     el.startStopBtn = document.getElementById('startStopBtn');
     el.startStopIcon = document.getElementById('startStopIcon');
@@ -115,8 +115,7 @@ function cacheElements() {
     el.lastUpdated = document.getElementById('lastUpdated');
 
     // Status info panel
-    el.pumpStatus = document.getElementById('pumpStatus');
-    el.currentRPM = document.getElementById('currentRPM');
+
     el.controlMode = document.getElementById('controlMode');
 
 
@@ -493,9 +492,7 @@ function updateDirectionDisplay() {
     if (el.directionArrow) {
         el.directionArrow.textContent = currentDirection === 'CW' ? '↻' : '↺';
     }
-    if (el.directionLabel) {
-        el.directionLabel.textContent = currentDirection;
-    }
+
 }
 
 // ========================================
@@ -605,14 +602,14 @@ function stopFlowTracking() {
     pumpStartTime = null;
 
     if (el.totalFlowValue) {
-        el.totalFlowValue.textContent = '0.000';
+        el.totalFlowValue.textContent = '0.00';
     }
 }
 
 function updateTotalFlowDisplay() {
     if (!isPumpRunning || !pumpStartTime) {
         if (el.totalFlowValue) {
-            el.totalFlowValue.textContent = '0.000';
+            el.totalFlowValue.textContent = '0.00';
         }
         return;
     }
@@ -632,7 +629,7 @@ function updateTotalFlowDisplay() {
     const sessionLiters = sessionFlowMl / 1000;
 
     if (el.totalFlowValue) {
-        el.totalFlowValue.textContent = sessionLiters.toFixed(3);
+        el.totalFlowValue.textContent = sessionLiters.toFixed(2);
     }
 
     // Update runtime display as well
@@ -1350,9 +1347,7 @@ function updateLiveStatus() {
 
     // Current RPM display is purely visual (large number)
     // We do NOT update the input field here to avoid fighting the user
-    if (el.currentRPM) {
-        el.currentRPM.textContent = liveStatus.currentRPM || 0;
-    }
+    // (Removed el.currentRPM update as element was removed)
 
     // Session dispensed (calculated via flow tracking in dashboard.js)
 

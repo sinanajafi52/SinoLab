@@ -1314,9 +1314,11 @@ function updateConnectionStatus(isOnline) {
         if (isOnline) {
             statusText.textContent = 'Online';
             statusText.classList.add('connected');
+            if (el.controlMode) el.controlMode.textContent = 'REMOTE'; // Fix for user request
         } else {
             statusText.textContent = 'Offline';
             statusText.classList.add('disconnected');
+            if (el.controlMode) el.controlMode.textContent = 'LOCAL';
         }
     }
     updateControlsState();

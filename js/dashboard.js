@@ -831,6 +831,13 @@ function updateTubeMaintenanceUI() {
 // ========================================
 async function togglePump() {
     console.log('togglePump called, isPumpRunning:', isPumpRunning);
+
+    // Safety check for connection
+    if (!connection || !connection.online) {
+        Utils.showWarning('Device is offline');
+        return;
+    }
+
     if (isPumpRunning) {
         await stopPump();
     } else {
@@ -1035,16 +1042,43 @@ function setControlsEnabled(enabled) {
  * Update controls state based on device online status and calibration
  */
 function updateControlsState() {
+    const isOnline = connection && connection.online;
 
+    // List of input controls to disable when offline
+    const inputsToLock = [
+        el.rpmInput,
+        el.rpmSlider,
+        el.rpmMinus,
+        el.rpmPlus,
+        el.flowInput,
+        el.directionBtn,
+        el.startStopBtn,
+        el.dispenseRpmSlider,
+        el.dispenseRpmInput,
+        el.dispenseOnTime,
+        el.dispenseOffTime
+    ];
+
+    // Disable/Enable based on connection
+    inputsToLock.forEach(input => {
+        if (input) input.disabled = !isOnline;
+    });
+
+    // Dispense tabs
+    if (el.rpmModeTab) {
+        if (!isOnline) el.rpmModeTab.classList.add('disabled');
+        else el.rpmModeTab.classList.remove('disabled');
+    }
+    // Volume tab is handled in checkCalibration
 
     // Dispense buttons
-    // Allow clicking dispense buttons while running to enable "Stop" functionality
+    // Allow clicking dispense buttons while running to enable "Stop" functionality, but only if online
     if (el.rpmDispenseBtn) {
-        el.rpmDispenseBtn.disabled = false;
+        el.rpmDispenseBtn.disabled = !isOnline;
     }
     if (el.volumeDispenseBtn) {
         // Volume dispense requires calibration, but we allow stop if running
-        el.volumeDispenseBtn.disabled = (!isPumpRunning && !isCalibrated);
+        el.volumeDispenseBtn.disabled = !isOnline || (!isPumpRunning && !isCalibrated);
     }
 
     // Update calibration warning visibility
@@ -1264,6 +1298,31 @@ function subscribeToDevice() {
 // ========================================
 // UI UPDATES
 // ========================================
+
+/**
+ * Update Sidebar Connection Status
+ * @param {boolean} isOnline 
+ */
+function updateConnectionStatus(isOnline) {
+    const statusText = document.querySelector('.sidebar-status span');
+    const statusDot = document.querySelector('.sidebar-status .status-dot');
+
+    if (statusText && statusDot) {
+        if (isOnline) {
+            statusText.textContent = 'Online';
+            statusText.style.color = '#00ff88';
+            statusDot.style.background = '#00ff88';
+            statusDot.style.boxShadow = '0 0 10px #00ff88';
+        } else {
+            statusText.textContent = 'Offline';
+            statusText.style.color = '#ff4444';
+            statusDot.style.background = '#ff4444';
+            statusDot.style.boxShadow = 'none';
+        }
+    }
+    updateControlsState();
+}
+
 function updateLiveStatus() {
     if (!liveStatus) return;
 
@@ -1352,9 +1411,13 @@ function updateTubeSettings() {
         el.settingsAntiDrip.textContent = tubeConfig.antiDrip ? 'Enabled' : 'Disabled';
     }
 
-    updateFlowDisplay();
-    updateMaxVolume();
-    updateControlsState();
+    // Crucial: Re-check calibration status whenever tube config changes
+    checkCalibration();
+}
+
+updateFlowDisplay();
+updateMaxVolume();
+updateControlsState();
 }
 
 function updateIdentityInfo() {

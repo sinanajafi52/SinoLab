@@ -1284,10 +1284,19 @@ function subscribeToDevice() {
     });
 
     // Connection updates
+    // Connection updates
+    // Force initial state to offline to clear "Connecting..."
+    updateConnectionStatus(false);
+
     connectionListener = deviceRef.child('connection').on('value', (snapshot) => {
-        connection = snapshot.val() || {};
+        const val = snapshot.val();
+        console.log('📡 RAW Firebase Connection:', val); // Debug Log
+        connection = val || {};
         updateConnectionStatus(connection.online === true);
         updateConnectionInfo(); // Update IP/LastSeen in Info page
+    }, (error) => {
+        console.error('🔥 Firebase Error:', error);
+        updateConnectionStatus(false);
     });
 
     console.log('Subscribed to device:', currentDeviceId);
@@ -1305,6 +1314,7 @@ function subscribeToDevice() {
  */
 function updateConnectionStatus(isOnline) {
     const statusText = document.getElementById('sidebarConnectionStatus');
+    console.log('🔄 updateConnectionStatus:', isOnline, 'El:', statusText);
 
     if (statusText) {
         if (isOnline) {

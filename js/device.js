@@ -32,7 +32,7 @@ async function deviceExists(deviceId) {
 }
 
 /**
- * Get device info
+ * Get device info (identity)
  * @param {string} deviceId - Device ID
  * @returns {Promise<Object|null>}
  */
@@ -41,7 +41,7 @@ async function getDeviceInfo(deviceId) {
 
     try {
         const snapshot = await FirebaseApp.getDeviceRef(deviceId)
-            .child('info')
+            .child('identity')
             .once('value');
 
         return snapshot.val();
@@ -52,21 +52,41 @@ async function getDeviceInfo(deviceId) {
 }
 
 /**
- * Get device status
+ * Get device connection
  * @param {string} deviceId - Device ID
  * @returns {Promise<Object|null>}
  */
-async function getDeviceStatus(deviceId) {
+async function getDeviceConnection(deviceId) {
     if (!deviceId) return null;
 
     try {
         const snapshot = await FirebaseApp.getDeviceRef(deviceId)
-            .child('status')
+            .child('connection')
             .once('value');
 
         return snapshot.val();
     } catch (error) {
-        console.error('Error getting device status:', error);
+        console.error('Error getting device connection:', error);
+        return null;
+    }
+}
+
+/**
+ * Get device live status
+ * @param {string} deviceId - Device ID
+ * @returns {Promise<Object|null>}
+ */
+async function getDeviceLiveStatus(deviceId) {
+    if (!deviceId) return null;
+
+    try {
+        const snapshot = await FirebaseApp.getDeviceRef(deviceId)
+            .child('liveStatus')
+            .once('value');
+
+        return snapshot.val();
+    } catch (error) {
+        console.error('Error getting device live status:', error);
         return null;
     }
 }
@@ -77,8 +97,8 @@ async function getDeviceStatus(deviceId) {
  * @returns {Promise<boolean>}
  */
 async function isDeviceOnline(deviceId) {
-    const status = await getDeviceStatus(deviceId);
-    return status?.online === true;
+    const conn = await getDeviceConnection(deviceId);
+    return conn?.online === true;
 }
 
 // ========================================
@@ -217,16 +237,15 @@ async function getLinkedDevicesWithInfo() {
 
     for (const deviceId of deviceIds) {
         const info = await getDeviceInfo(deviceId);
-        const status = await getDeviceStatus(deviceId);
+        const conn = await getDeviceConnection(deviceId);
         const linkData = linkedDevices[deviceId];
 
         devicesWithInfo.push({
             deviceId,
             nickname: linkData?.nickname || '',
             linkedAt: linkData?.linkedAt,
-            info: info || {},
-            status: status || {},
-            online: status?.online === true
+            info: info || {}, // identity
+            online: conn?.online === true
         });
     }
 
@@ -393,13 +412,13 @@ function setupChangeDeviceButton(selector = '#changeDeviceBtn') {
 // ========================================
 
 /**
- * Subscribe to device status updates
+ * Subscribe to device status updates (LiveStatus)
  * @param {string} deviceId - Device ID
  * @param {Function} callback - Callback function(status)
  * @returns {Function} Unsubscribe function
  */
 function subscribeToDeviceStatus(deviceId, callback) {
-    const statusRef = FirebaseApp.getDeviceRef(deviceId).child('status');
+    const statusRef = FirebaseApp.getDeviceRef(deviceId).child('liveStatus');
 
     const listener = statusRef.on('value', (snapshot) => {
         const status = snapshot.val();
@@ -424,11 +443,20 @@ function subscribeToDeviceStatus(deviceId, callback) {
  * @returns {Function} Unsubscribe function
  */
 function subscribeToOnlineStatus(deviceId, callback) {
-    return subscribeToDeviceStatus(deviceId, (status) => {
+    const connRef = FirebaseApp.getDeviceRef(deviceId).child('connection');
+
+    const listener = connRef.on('value', (snapshot) => {
+        const conn = snapshot.val();
         if (callback) {
-            callback(status?.online === true);
+            callback(conn?.online === true);
         }
     });
+
+    deviceStatusListeners.push({ ref: connRef, event: 'value', listener });
+
+    return () => {
+        connRef.off('value', listener);
+    };
 }
 
 /**
@@ -457,7 +485,8 @@ window.Device = {
     // Validation
     deviceExists,
     getDeviceInfo,
-    getDeviceStatus,
+    getDeviceLiveStatus,
+    getDeviceConnection,
     isDeviceOnline,
 
     // Linking

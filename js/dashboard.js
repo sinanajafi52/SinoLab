@@ -6,34 +6,37 @@
 // ========================================
 // STATE
 // ========================================
+// State
 let currentDeviceId = null;
-let deviceStatus = null;
-let deviceInfo = null;
-let deviceSettings = null;
+let liveStatus = null;      // New: liveStatus node
+let tubeConfig = null;      // New: tubeConfig node
+let identity = null;        // New: identity node
+let connection = null;      // New: connection node
+let maintenance = null;     // New: maintenance node
+
 let isCalibrated = false;
 let isPumpRunning = false;
-let deviceOnlineStatus = false;  // Renamed to avoid conflict with device.js isDeviceOnline function
-let currentDirection = 'CW'; // CW or CCW
+let deviceOnlineStatus = false;
+let currentDirection = 'CW';
 let targetRPM = 100;
-let targetFlow = 0;  // Separate flow value
-let inputMode = 'rpm';  // 'rpm' or 'flow' - which control is active
-let dispenseMode = 'rpm'; // 'rpm' or 'volume'
+let targetFlow = 0;
+let inputMode = 'rpm';
+let dispenseMode = 'rpm';
 
 // Real-time flow calculation
-let pumpStartTime = null;  // When pump started running
-let sessionFlowMl = 0;     // Accumulated flow in mL for current session
-let flowUpdateInterval = null; // Interval for updating flow display
-let currentFlowRate = 0;   // Current flow rate in mL/min
+let pumpStartTime = null;
+let sessionFlowMl = 0;
+let flowUpdateInterval = null;
+let currentFlowRate = 0;
 
 // Firebase listeners
-let statusListener = null;
-let settingsListener = null;
-let infoListener = null;
-let controlListener = null;  // For control node (mode, acknowledged)
+let liveStatusListener = null;
+let tubeConfigListener = null;
+let identityListener = null;
+let maintenanceListener = null;
 let connectionListener = null;
 
-// Control state from control node
-let controlMode = 'LOCAL';
+// Control state (Removed controlMode as it's no longer used)
 
 // UI Elements
 const el = {};
@@ -550,7 +553,7 @@ function updateInputModeDisplay() {
 function updateFlowDisplay() {
     // Only auto-update flow from RPM when in RPM mode
     if (inputMode === 'rpm') {
-        const mlPerRev = deviceSettings?.mlPerRev || 0;
+        const mlPerRev = tubeConfig?.mlPerRev || 0;
         const flow = (mlPerRev > 0 && targetRPM > 0) ? targetRPM * mlPerRev : 0;
 
         currentFlowRate = flow; // Store for total calculation
@@ -694,14 +697,14 @@ async function saveTubeChange() {
     try {
         const now = Date.now();
 
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance').set({
+        // Update maintenance node
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance').update({
             lastTubeChange: now,
-            runtimeSeconds: 0
+            tubeRuntimeSeconds: 0
         });
 
         Utils.showSuccess('Tube change recorded successfully');
-        updateTubeMaintenanceUI();
-
+        // UI update is handled by listener
     } catch (error) {
         console.error('Error recording tube change:', error);
         Utils.showError('Failed to record tube change');
@@ -716,7 +719,7 @@ function startRuntimeTracking() {
     if (runtimeUpdateInterval) clearInterval(runtimeUpdateInterval);
     runtimeUpdateInterval = setInterval(() => {
         updateRuntimeInDB();
-    }, 10000); // Update every 10 seconds
+    }, 10000);
 }
 
 // Stop tracking and save final runtime
@@ -738,16 +741,22 @@ async function updateRuntimeInDB() {
     if (!currentDeviceId || !pumpRuntimeStart) return;
 
     try {
-        const maintenance = deviceSettings?.maintenance || {};
-        const currentRuntime = maintenance.runtimeSeconds || 0;
-
         // Calculate elapsed seconds since pump started
         const elapsedSeconds = Math.floor((Date.now() - pumpRuntimeStart) / 1000);
 
-        // Update database with new total
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance/runtimeSeconds').set(
-            currentRuntime + elapsedSeconds
-        );
+        if (elapsedSeconds < 1) return;
+
+        // Update tube runtime
+        const refTube = FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance/tubeRuntimeSeconds');
+        await refTube.transaction((currentVal) => {
+            return (currentVal || 0) + elapsedSeconds;
+        });
+
+        // Update total runtime
+        const refTotal = FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance/totalRuntimeSeconds');
+        await refTotal.transaction((currentVal) => {
+            return (currentVal || 0) + elapsedSeconds;
+        });
 
         // Reset start time for next interval
         pumpRuntimeStart = Date.now();
@@ -758,11 +767,13 @@ async function updateRuntimeInDB() {
 }
 
 function updateTubeMaintenanceUI() {
-    const maintenance = deviceSettings?.maintenance || {};
+    // maintenance object is global state now
+    if (!maintenance) return;
+
     const lastTubeChange = maintenance.lastTubeChange || 0;
 
     // Base runtime from DB
-    let totalSeconds = maintenance.runtimeSeconds || 0;
+    let totalSeconds = maintenance.tubeRuntimeSeconds || 0;
 
     // Add volatile elapsed time if running
     if (isPumpRunning && pumpRuntimeStart) {
@@ -813,14 +824,17 @@ async function startPump() {
 
     // Calculate RPM based on input mode
     let rpmToUse = targetRPM;
+    let flowRateVal = 0;
+
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
 
     if (inputMode === 'flow') {
         // Convert flow to RPM
-        const mlPerRev = deviceSettings?.mlPerRev || 0;
         if (mlPerRev > 0 && targetFlow > 0) {
             rpmToUse = Math.min(400, Math.max(1, Math.round(targetFlow / mlPerRev)));
+            flowRateVal = targetFlow;
         } else {
-            Utils.showWarning('Please set Flow higher than 0');
+            Utils.showWarning('Please set Flow higher than 0 and ensure device is calibrated');
             return;
         }
     } else {
@@ -828,22 +842,25 @@ async function startPump() {
             Utils.showWarning('Please set RPM higher than 0');
             return;
         }
+        // Calculate flow rate if calibrated
+        if (mlPerRev > 0) {
+            flowRateVal = rpmToUse * mlPerRev;
+        }
     }
 
     // Optimistic UI update first for responsiveness
     setPumpRunning(true);
 
     try {
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
-            command: 'START',
-            rpm: rpmToUse,
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+            activeMode: 'STATUS',
+            inputMode: inputMode.toUpperCase(),
+            currentRPM: rpmToUse,
+            currentFlowRate: flowRateVal > 0 ? flowRateVal : null,
             direction: currentDirection,
-            onTime: 0,
-            offTime: 0,
-            targetVolume: 0,
-            issuedBy: Auth.getCurrentUserId(),
-            issuedAt: Date.now(),
-            acknowledged: false
+            acknowledged: false,
+            lastIssuedBy: Auth.getCurrentUserId(),
+            lastUpdated: new Date().toISOString()
         });
 
         Utils.showSuccess('Pump started');
@@ -862,11 +879,11 @@ async function stopPump() {
     setPumpRunning(false);
 
     try {
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').update({
-            command: 'STOP',
-            issuedBy: Auth.getCurrentUserId(),
-            issuedAt: Date.now(),
-            acknowledged: false
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+            activeMode: 'NONE',
+            acknowledged: false,
+            lastIssuedBy: Auth.getCurrentUserId(),
+            lastUpdated: new Date().toISOString()
         });
 
         Utils.showSuccess('Pump stopped');
@@ -874,7 +891,8 @@ async function stopPump() {
         console.error('Error stopping pump:', error);
         // Revert UI on error
         setPumpRunning(true);
-        Utils.showError('Failed to stop pump. Check connection.');
+        // Maybe don't show error for stop if it was just connection glitch, but good to know
+        Utils.showError('Failed to stop pump (Connection error)');
     }
 }
 
@@ -1062,16 +1080,20 @@ async function dispenseRpmBased() {
     try {
         Utils.showLoading('Starting dispense...');
 
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
-            command: 'DISPENSE_TIMED',
+        // 1. Set parameters
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('rpmDispense').set({
             rpm: rpm,
-            direction: direction,
             onTime: onTime * 1000, // Convert to ms
             offTime: offTime * 1000, // Convert to ms
-            targetVolume: 0,
-            issuedBy: Auth.getCurrentUserId(),
-            issuedAt: Date.now(),
-            acknowledged: false
+            direction: direction
+        });
+
+        // 2. Trigger action
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+            activeMode: 'RPM',
+            acknowledged: false,
+            lastIssuedBy: Auth.getCurrentUserId(),
+            lastUpdated: new Date().toISOString()
         });
 
         // Optimistic UI update
@@ -1097,7 +1119,7 @@ function updateEstimatedTime() {
     if (!el.estimatedTime) return;
 
     const volume = parseFloat(el.volumeInput?.value) || 0;
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
 
     const valueEl = el.estimatedTime.querySelector('.estimation-value');
     const labelEl = el.estimatedTime.querySelector('.estimation-label');
@@ -1114,7 +1136,7 @@ function updateEstimatedTime() {
 
 function updateMaxVolume() {
     // Calculate max volume based on 400 RPM limit
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
     if (mlPerRev > 0 && el.volumeInput) {
         // Max volume per minute at 400 RPM
         const maxFlowPerMin = 400 * mlPerRev;
@@ -1158,16 +1180,19 @@ async function dispenseVolume() {
     setPumpRunning(true);
 
     try {
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
-            command: 'DISPENSE_VOLUME',
-            rpm: VOLUME_DISPENSE_RPM,
-            direction: direction,
-            onTime: 0,
-            offTime: offTime * 1000, // Convert to ms
+        // 1. Set parameters
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('volumeDispense').set({
             targetVolume: volume,
-            issuedBy: Auth.getCurrentUserId(),
-            issuedAt: Date.now(),
-            acknowledged: false
+            offTime: offTime * 1000, // Convert to ms
+            direction: direction
+        });
+
+        // 2. Trigger action
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+            activeMode: 'VOLUME',
+            acknowledged: false,
+            lastIssuedBy: Auth.getCurrentUserId(),
+            lastUpdated: new Date().toISOString()
         });
 
         Utils.showSuccess(`Dispensing ${volume} mL`);
@@ -1199,16 +1224,11 @@ async function preFlush() {
     try {
         Utils.showLoading('Starting pre-flush...');
 
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
-            command: 'PRE_FLUSH',
-            rpm: 200,           // Default pre-flush speed
-            direction: 'CW',    // Default direction
-            onTime: 3000,       // 3 seconds
-            offTime: 0,
-            targetVolume: 0,
-            issuedBy: Auth.getCurrentUserId(),
-            issuedAt: Date.now(),
-            acknowledged: false
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+            activeMode: 'PREFLUSH',
+            acknowledged: false,
+            lastIssuedBy: Auth.getCurrentUserId(),
+            lastUpdated: new Date().toISOString()
         });
 
         // Optimistic UI update
@@ -1232,124 +1252,100 @@ function subscribeToDevice() {
 
     const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
 
-    // Status updates
-    statusListener = deviceRef.child('status').on('value', (snapshot) => {
-        deviceStatus = snapshot.val() || {};
-        updateStatusUI();
+    // Live Status updates
+    liveStatusListener = deviceRef.child('liveStatus').on('value', (snapshot) => {
+        liveStatus = snapshot.val() || {};
+        updateLiveStatus();
     });
 
-    // Settings updates
-    settingsListener = deviceRef.child('settings').on('value', (snapshot) => {
-        deviceSettings = snapshot.val() || {};
-        updateSettingsUI();
+    // Tube Config updates (Settings)
+    tubeConfigListener = deviceRef.child('tubeConfig').on('value', (snapshot) => {
+        tubeConfig = snapshot.val() || {};
+        updateTubeSettings();
         checkCalibration();
     });
 
-    // Info updates
-    infoListener = deviceRef.child('info').on('value', (snapshot) => {
-        deviceInfo = snapshot.val() || {};
-        updateInfoUI();
+    // Identity updates (Info)
+    identityListener = deviceRef.child('identity').on('value', (snapshot) => {
+        identity = snapshot.val() || {};
+        updateIdentityInfo();
+    });
+
+    // Maintenance updates
+    maintenanceListener = deviceRef.child('maintenance').on('value', (snapshot) => {
+        maintenance = snapshot.val() || {};
+        updateMaintenanceInfo();
         updateTubeMaintenanceUI();
     });
 
-    // Control node updates (for mode and acknowledged)
-    controlListener = deviceRef.child('control').on('value', (snapshot) => {
-        const controlData = snapshot.val() || {};
-        controlMode = controlData.mode || 'LOCAL';
-        updateControlModeUI();
-
-        // Check for acknowledged state to hide loading on buttons
-        if (controlData.acknowledged === true) {
-            hideButtonLoading();
-        }
-    });
-
-    // Maintenance updates (for tube change tracking)
-    deviceRef.child('maintenance').on('value', (snapshot) => {
-        const maintenanceData = snapshot.val() || {};
-        // Store in deviceSettings for easy access
-        if (!deviceSettings) deviceSettings = {};
-        deviceSettings.maintenance = maintenanceData;
-        updateTubeMaintenanceUI();
+    // Connection updates
+    connectionListener = deviceRef.child('connection').on('value', (snapshot) => {
+        connection = snapshot.val() || {};
+        updateConnectionStatus(connection.online === true);
+        updateConnectionInfo(); // Update IP/LastSeen in Info page
     });
 
     console.log('Subscribed to device:', currentDeviceId);
 }
 
-function setupConnectionMonitoring() {
-    connectionListener = FirebaseApp.database.ref('.info/connected')
-        .on('value', (snapshot) => {
-            updateConnectionStatus(snapshot.val() === true);
-        });
-}
+// setupConnectionMonitoring removed - merged into subscribeToDevice connection listener
 
 // ========================================
 // UI UPDATES
 // ========================================
-function updateStatusUI() {
-    if (!deviceStatus) return;
+function updateLiveStatus() {
+    if (!liveStatus) return;
 
-    // Update device online state
-    deviceOnlineStatus = deviceStatus.online === true;
-
-    // Update pump running state from device - only trust if device is online
-    // and data is fresh (within 60 seconds)
-    const lastUpdated = deviceStatus.lastUpdated || 0;
-    const isDataFresh = (Date.now() - lastUpdated) < 60000; // 60 seconds
-
-    if (deviceOnlineStatus && isDataFresh) {
-        const running = deviceStatus.pumpRunning === true;
-        setPumpRunning(running);
-    } else if (!deviceOnlineStatus) {
-        // Device is offline - assume pump is stopped
-        setPumpRunning(false);
+    // Check for acknowledged state to hide loading on buttons
+    if (liveStatus.acknowledged === true) {
+        hideButtonLoading();
     }
-    // If data is stale but device claims online, keep current UI state
+
+    // Determine pump running state from activeMode
+    const running = liveStatus.activeMode && liveStatus.activeMode !== 'NONE';
+
+    // Check connection validity (using separate connection state)
+    if (connection && !connection.online) {
+        setPumpRunning(false);
+    } else {
+        setPumpRunning(running);
+    }
+
+    // Update direction
+    if (liveStatus.direction && liveStatus.direction !== currentDirection) {
+        currentDirection = liveStatus.direction;
+        updateDirectionDisplay();
+    }
 
     // Current RPM display
     if (el.currentRPM) {
-        el.currentRPM.textContent = deviceStatus.currentRPM || 0;
+        el.currentRPM.textContent = liveStatus.currentRPM || 0;
     }
 
-    // Control mode - now from control node, not status
-    // (updateControlModeUI handles this)
-
-    // Session dispensed (for status page info display)
-    const sessionMl = deviceStatus.sessionDispensed || 0;
+    // Session dispensed (calculated via flow tracking in dashboard.js)
     if (el.sessionDispensed) {
-        el.sessionDispensed.textContent = `${sessionMl.toFixed(1)} mL`;
+        el.sessionDispensed.textContent = `${sessionFlowMl.toFixed(1)} mL`;
     }
-
-    // Note: Total Flow is now calculated in real-time by updateTotalFlowDisplay()
 
     // Last updated
     if (el.lastUpdated) {
-        el.lastUpdated.textContent = 'Last updated: ' + Utils.formatRelativeTime(deviceStatus.lastUpdated);
+        el.lastUpdated.textContent = 'Last updated: ' + (liveStatus.lastUpdated ? Utils.formatRelativeTime(liveStatus.lastUpdated) : 'Never');
     }
 
-    // Update connection status and controls
-    updateConnectionStatus(FirebaseApp.isConnected());
     updateControlsState();
 }
 
-function updateSettingsUI() {
-    if (!deviceSettings) return;
+function updateTubeSettings() {
+    if (!tubeConfig) return;
 
-    // Tube Size - use tubeName only (board doesn't send tubeID)
-    if (el.settingsTube) {
-        const tubeName = deviceSettings.tubeName;
-        if (tubeName && tubeName.trim() !== '') {
-            el.settingsTube.textContent = tubeName;
-            el.settingsTube.classList.remove('warning');
-        } else {
-            el.settingsTube.textContent = 'Not set';
-            el.settingsTube.classList.add('warning');
-        }
+    // Tube Name
+    if (el.settingsTubeName) {
+        el.settingsTubeName.textContent = tubeConfig.tubeName || 'Not Selected';
     }
 
-    // Calibration Value - never show -1 or negative values
+    // Ml Per Rev
+    const mlPerRev = tubeConfig.mlPerRev;
     if (el.settingsMlPerRev) {
-        const mlPerRev = deviceSettings.mlPerRev;
         if (mlPerRev && mlPerRev > 0) {
             el.settingsMlPerRev.textContent = `${mlPerRev.toFixed(3)} mL/rev`;
             el.settingsMlPerRev.classList.remove('warning');
@@ -1361,7 +1357,7 @@ function updateSettingsUI() {
 
     // Calibration Type
     if (el.settingsCalibrationType) {
-        const type = deviceSettings.calibrationType;
+        const type = tubeConfig.calibrationType;
         if (type && type !== 'none') {
             el.settingsCalibrationType.textContent = type.charAt(0).toUpperCase() + type.slice(1);
         } else {
@@ -1371,9 +1367,10 @@ function updateSettingsUI() {
 
     // Last Calibrated
     if (el.settingsLastCalibrated) {
-        const lastCal = deviceSettings.lastCalibrated;
-        if (lastCal && lastCal > 0) {
-            el.settingsLastCalibrated.textContent = Utils.formatDateTime(lastCal);
+        const lastCal = tubeConfig.lastCalibrated;
+        if (lastCal) {
+            const date = new Date(lastCal);
+            el.settingsLastCalibrated.textContent = !isNaN(date) ? Utils.formatDateTime(date) : 'Never';
         } else {
             el.settingsLastCalibrated.textContent = 'Never';
         }
@@ -1381,79 +1378,67 @@ function updateSettingsUI() {
 
     // Anti-Drip
     if (el.settingsAntiDrip) {
-        el.settingsAntiDrip.textContent = deviceSettings.antiDrip ? 'Enabled' : 'Disabled';
+        el.settingsAntiDrip.textContent = tubeConfig.antiDrip ? 'Enabled' : 'Disabled';
     }
 
-    // Update flow display when settings change
     updateFlowDisplay();
     updateMaxVolume();
     updateControlsState();
 }
 
-function updateInfoUI() {
-    if (!deviceInfo) return;
+function updateIdentityInfo() {
+    if (!identity) return;
 
-    if (el.infoDeviceName) el.infoDeviceName.textContent = deviceInfo.deviceName || 'Frog Pump';
+    if (el.infoMAC) el.infoMAC.textContent = identity.mac || 'N/A';
+    if (el.infoFirmware) el.infoFirmware.textContent = identity.firmware || 'Unknown';
+    if (el.infoDeviceName) el.infoDeviceName.textContent = 'Frog Pump';
     if (el.infoDeviceId) el.infoDeviceId.textContent = currentDeviceId;
-    if (el.infoFirmware) el.infoFirmware.textContent = deviceInfo.firmware || 'Unknown';
-    if (el.infoIP) el.infoIP.textContent = deviceInfo.ip || 'N/A';
-    if (el.infoMAC) el.infoMAC.textContent = deviceInfo.mac || 'N/A';
-    if (el.infoLastSeen) el.infoLastSeen.textContent = Utils.formatRelativeTime(deviceInfo.lastSeen);
+}
+
+function updateConnectionInfo() {
+    if (!connection) return;
+
+    if (el.infoIP) el.infoIP.textContent = connection.ip || 'N/A';
+    if (el.infoLastSeen && connection.lastSeen) {
+        const date = new Date(connection.lastSeen);
+        el.infoLastSeen.textContent = !isNaN(date) ? Utils.formatRelativeTime(date) : connection.lastSeen;
+    }
+}
+
+function updateMaintenanceInfo() {
+    if (!maintenance) return;
+
+    // Runtime from maintenance node (total)
     if (el.infoRuntime) {
-        const hours = deviceInfo.totalWorkingHours || 0;
+        const totalSeconds = maintenance.totalRuntimeSeconds || 0;
+        const hours = totalSeconds / 3600;
         el.infoRuntime.textContent = `${hours.toFixed(1)} hours`;
     }
 }
 
 function checkCalibration() {
-    // Board doesn't send tubeID - use mlPerRev > 0 and tubeName not empty
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
-    const tubeName = deviceSettings?.tubeName || '';
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
+    const tubeName = tubeConfig?.tubeName || '';
 
     isCalibrated = (mlPerRev > 0 && tubeName.trim() !== '');
 
-    // Status page warning
     if (el.calibWarning) {
-        if (isCalibrated) {
-            el.calibWarning.classList.add('hidden');
-        } else {
-            el.calibWarning.classList.remove('hidden');
-        }
+        el.calibWarning.classList.toggle('hidden', isCalibrated);
     }
 
-    // Dispense page - only show volume mode warning, RPM mode always works
     if (el.dispenseWarning) {
-        if (isCalibrated) {
-            el.dispenseWarning.classList.add('hidden');
-        } else {
-            el.dispenseWarning.classList.remove('hidden');
-        }
+        el.dispenseWarning.classList.toggle('hidden', isCalibrated);
     }
 
-    // Volume mode tab - disable if not calibrated
     if (el.volumeModeTab) {
-        if (isCalibrated) {
-            el.volumeModeTab.classList.remove('disabled');
-        } else {
-            el.volumeModeTab.classList.add('disabled');
-            // Switch to RPM mode if volume mode is selected
-            if (dispenseMode === 'volume') {
-                switchDispenseMode('rpm');
-            }
+        el.volumeModeTab.classList.toggle('disabled', !isCalibrated);
+        if (!isCalibrated && dispenseMode === 'volume') {
+            switchDispenseMode('rpm');
         }
     }
 
     updateEstimatedTime();
     updateFlowDisplay();
-}
-
-/**
- * Update control mode display (from control node)
- */
-function updateControlModeUI() {
-    if (el.controlMode) {
-        el.controlMode.textContent = controlMode;
-    }
 }
 
 /**

@@ -17,6 +17,7 @@ let currentDirection = 'CW'; // CW or CCW
 let targetRPM = 100;
 let targetFlow = 0;  // Separate flow value
 let inputMode = 'rpm';  // 'rpm' or 'flow' - which control is active
+let isFlowInputFocused = false;  // Track if user is typing in flow input
 let dispenseMode = 'rpm'; // 'rpm' or 'volume'
 
 // Firebase listeners
@@ -53,8 +54,10 @@ function initDashboard() {
 
         // Enable controls first (before Firebase data arrives)
         isPumpRunning = false;
+        inputMode = 'rpm';  // Ensure we start in RPM mode
         setControlsEnabled(true);
         updateDirectionDisplay();
+        setRPM(targetRPM);  // Initialize RPM display and controls
 
         // Update sidebar device ID
         if (el.sidebarDeviceId) {
@@ -269,17 +272,21 @@ function setupEventHandlers() {
     // Flow input handler - independent from RPM
     if (el.flowInput) {
         el.flowInput.addEventListener('focus', () => {
+            isFlowInputFocused = true;
             switchInputMode('flow');
+        });
+        el.flowInput.addEventListener('blur', () => {
+            isFlowInputFocused = false;
+            // Validate on blur
+            const val = Math.max(0, parseFloat(el.flowInput.value) || 0);
+            targetFlow = val;
+            if (val > 0) {
+                el.flowInput.value = val;
+            }
         });
         el.flowInput.addEventListener('input', (e) => {
             // Just store the flow value - don't convert to RPM
             targetFlow = parseFloat(e.target.value) || 0;
-        });
-        el.flowInput.addEventListener('change', (e) => {
-            // Validate on change
-            const val = Math.max(0, parseFloat(e.target.value) || 0);
-            targetFlow = val;
-            e.target.value = val > 0 ? val : '';
         });
     }
 
@@ -484,9 +491,17 @@ function updateInputModeDisplay() {
             el.flowDisplayBox.classList.add('editable');
             if (el.flowInput) {
                 el.flowInput.classList.remove('hidden');
-                el.flowInput.value = targetFlow > 0 ? targetFlow : '';
-                // Auto-focus flow input so user can start typing
-                setTimeout(() => el.flowInput.focus(), 50);
+                // Only set value and focus if user is NOT currently typing
+                if (!isFlowInputFocused) {
+                    el.flowInput.value = targetFlow > 0 ? targetFlow : '';
+                    // Auto-focus only on first switch to flow mode
+                    setTimeout(() => {
+                        if (!isFlowInputFocused) {
+                            el.flowInput.focus();
+                            isFlowInputFocused = true;
+                        }
+                    }, 50);
+                }
             }
             if (el.flowValue) el.flowValue.classList.add('hidden');
         }
@@ -1197,19 +1212,26 @@ function hideButtonLoading() {
 }
 
 function updateConnectionStatus(connected) {
-    const isOnline = deviceStatus?.online === true;
-
     let statusClass = 'connecting';
     let statusText = 'Connecting...';
 
     if (connected) {
-        if (isOnline) {
+        // Firebase is connected, now check device status
+        if (deviceStatus === null) {
+            // Still loading device data
+            statusClass = 'connecting';
+            statusText = 'Loading...';
+        } else if (deviceStatus.online === true) {
             statusClass = 'connected';
             statusText = 'Device Online';
         } else {
             statusClass = 'disconnected';
             statusText = 'Device Offline';
         }
+    } else {
+        // Firebase not connected
+        statusClass = 'disconnected';
+        statusText = 'No Connection';
     }
 
     if (el.sidebarConnectionStatus) {

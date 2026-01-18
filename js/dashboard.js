@@ -45,7 +45,7 @@ const el = {};
 // INITIALIZATION
 // ========================================
 function initDashboard() {
-    console.log('🚀 initDashboard started');
+    console.log('🚀 initDashboard started - CLEAN VERSION 2.0');
 
     currentDeviceId = Utils.getSavedDeviceId();
     console.log('📱 Device ID:', currentDeviceId);

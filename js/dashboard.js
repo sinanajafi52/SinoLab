@@ -1537,32 +1537,6 @@ function hideButtonLoading() {
     });
 }
 
-function updateConnectionStatus(connected) {
-    const isOnline = deviceStatus?.online === true;
-
-    let statusClass = 'connecting';
-    let statusText = 'Connecting...';
-
-    if (connected) {
-        if (isOnline) {
-            statusClass = 'connected';
-            statusText = 'Device Online';
-        } else {
-            statusClass = 'disconnected';
-            statusText = 'Device Offline';
-        }
-    }
-
-    if (el.sidebarConnectionStatus) {
-        el.sidebarConnectionStatus.className = 'sidebar-connection ' + statusClass;
-        el.sidebarConnectionStatus.textContent = statusText;
-    }
-
-    if (el.mobileConnectionStatus) {
-        el.mobileConnectionStatus.className = 'mobile-connection ' + statusClass;
-    }
-}
-
 // ========================================
 // CLEANUP
 // ========================================
@@ -1570,13 +1544,11 @@ function cleanup() {
     if (!currentDeviceId) return;
     const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
 
-    if (statusListener) deviceRef.child('status').off('value', statusListener);
-    if (settingsListener) deviceRef.child('settings').off('value', settingsListener);
-    if (infoListener) deviceRef.child('info').off('value', infoListener);
-    if (controlListener) deviceRef.child('control').off('value', controlListener);
-    if (connectionListener) {
-        FirebaseApp.database.ref('.info/connected').off('value', connectionListener);
-    }
+    if (liveStatusListener) deviceRef.child('liveStatus').off('value', liveStatusListener);
+    if (tubeConfigListener) deviceRef.child('tubeConfig').off('value', tubeConfigListener);
+    if (identityListener) deviceRef.child('identity').off('value', identityListener);
+    if (maintenanceListener) deviceRef.child('maintenance').off('value', maintenanceListener);
+    if (connectionListener) deviceRef.child('connection').off('value', connectionListener);
 }
 
 window.addEventListener('beforeunload', cleanup);
@@ -1590,10 +1562,10 @@ window.Dashboard = {
     stopPump,
     togglePump,
     get deviceId() { return currentDeviceId; },
-    get status() { return deviceStatus; },
+    get status() { return liveStatus; }, // Updated mapping
     get isRunning() { return isPumpRunning; },
     get isCalibrated() { return isCalibrated; },
     cleanup
 };
 
-console.log('Dashboard module loaded');
+console.log('Dashboard module loaded - CLEANUP DONE');

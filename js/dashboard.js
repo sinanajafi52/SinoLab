@@ -118,7 +118,7 @@ function cacheElements() {
     el.pumpStatus = document.getElementById('pumpStatus');
     el.currentRPM = document.getElementById('currentRPM');
     el.controlMode = document.getElementById('controlMode');
-    el.sessionDispensed = document.getElementById('sessionDispensed');
+
 
     // Dispense page - Mode tabs
     el.rpmModeTab = document.getElementById('rpmModeTab');
@@ -1355,9 +1355,7 @@ function updateLiveStatus() {
     }
 
     // Session dispensed (calculated via flow tracking in dashboard.js)
-    if (el.sessionDispensed) {
-        el.sessionDispensed.textContent = `${sessionFlowMl.toFixed(1)} mL`;
-    }
+
 
     // Last updated
     if (el.lastUpdated) {

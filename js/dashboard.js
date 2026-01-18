@@ -294,7 +294,7 @@ function setupEventHandlers() {
         });
         el.flowInput.addEventListener('change', (e) => {
             // Validate and clamp to achievable range on blur/enter
-            const mlPerRev = deviceSettings?.mlPerRev || 0;
+            const mlPerRev = tubeConfig?.mlPerRev || 0;
             const maxRPM = 400;
             const minRPM = 1;
 
@@ -529,7 +529,7 @@ function updateInputModeDisplay() {
         }
 
         // Update flow display from RPM
-        const mlPerRev = deviceSettings?.mlPerRev || 0;
+        const mlPerRev = tubeConfig?.mlPerRev || 0;
         const flow = (mlPerRev > 0 && targetRPM > 0) ? targetRPM * mlPerRev : 0;
         if (el.flowValue) {
             el.flowValue.textContent = flow > 0 ? flow.toFixed(2) : '--';

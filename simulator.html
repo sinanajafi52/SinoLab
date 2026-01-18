@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frog Pump Simulator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .card {
+            background: #2d2d2d;
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            width: 400px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #00ff88;
+            margin-top: 0;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+
+        .label {
+            color: #888;
+        }
+
+        .value {
+            font-weight: bold;
+            font-family: monospace;
+        }
+
+        .blink {
+            animation: blinker 1.5s linear infinite;
+            color: #00ff88;
+        }
+
+        @keyframes blinker {
+            50% {
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h1>🐸 Frog Simulator</h1>
+        <p>Device Emulation Running</p>
+
+        <div class="status-row">
+            <span class="label">Device ID:</span>
+            <span class="value" id="deviceId">Loading...</span>
+        </div>
+        <div class="status-row">
+            <span class="label">Status:</span>
+            <span class="value" id="status">Initializing...</span>
+        </div>
+        <div class="status-row">
+            <span class="label">Heartbeat:</span>
+            <span class="value" id="lastHeartbeat">--:--:--</span>
+        </div>
+        <div class="status-row">
+            <span class="label">Active Mode:</span>
+            <span class="value" id="activeMode">--</span>
+        </div>
+        <div class="status-row">
+            <span class="label">Current RPM:</span>
+            <span class="value" id="rpm">--</span>
+        </div>
+
+        <p style="font-size: 0.8rem; color: #666; margin-top: 20px;">
+            Open <b>dashboard.html</b> in another tab and link to <br>
+            <b style="color:#fff">FROG-TEST38678</b>
+        </p>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <!-- App Scripts -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/simulator.js"></script>
+</body>
+
+</html>

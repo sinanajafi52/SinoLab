@@ -73,9 +73,14 @@ function initDashboard() {
         // Setup change device button
         Device.setupChangeDeviceButton();
 
+        // Check for database migration
+        if (window.Migration && currentDeviceId) {
+            await window.Migration.checkAndMigrate(currentDeviceId);
+        }
+
         // Subscribe to Firebase after UI is ready
         subscribeToDevice();
-        setupConnectionMonitoring();
+        // setupConnectionMonitoring removed (integrated into subscribeToDevice)
 
         console.log('Dashboard initialized successfully');
     });
@@ -152,7 +157,7 @@ function cacheElements() {
     el.infoRuntime = document.getElementById('infoRuntime');
 
     // System Info - Calibration
-    el.settingsTube = document.getElementById('settingsTube');
+    el.settingsTubeName = document.getElementById('settingsTube');
     el.settingsMlPerRev = document.getElementById('settingsMlPerRev');
     el.settingsCalibrationType = document.getElementById('settingsCalibrationType');
     el.settingsLastCalibrated = document.getElementById('settingsLastCalibrated');

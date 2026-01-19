@@ -1609,20 +1609,59 @@ function monitorActiveController(deviceRef) {
         }
 
         if (!controller || isBroken || isStale) {
-            // Case 1: Free, Broken, or Stale -> Claim it!
+            // Case 1: Free, Broken, or Stale -> Claim it ATOMICALLY!
             const reason = isBroken ? 'Broken' : (isStale ? `Stale (${Math.round(timeDiff / 1000)}s inactive)` : 'Free');
-            console.log(`🔓 Claiming lock: ${reason}`);
+            console.log(`🔓 Attempting to claim lock: ${reason}`);
 
-            controllerRef.set({
-                uid: myUid,
-                email: myEmail,
-                startTime: Date.now(),
-                lastActive: Date.now()
-            }).then(() => {
-                controllerRef.onDisconnect().remove();
+            // Use TRANSACTION for atomic claim (prevents race condition)
+            controllerRef.transaction((currentValue) => {
+                // Double-check lock is still available
+                if (!currentValue) {
+                    return {
+                        uid: myUid,
+                        email: myEmail,
+                        startTime: Date.now(),
+                        lastActive: Date.now()
+                    };
+                }
+
+                // Check if still stale/broken
+                const nowTxn = Date.now();
+                const isTxnBroken = !currentValue.uid || !currentValue.email || !currentValue.lastActive;
+                const isTxnStale = currentValue.lastActive && (nowTxn - currentValue.lastActive > 3000);
+
+                if (isTxnBroken || isTxnStale) {
+                    return {
+                        uid: myUid,
+                        email: myEmail,
+                        startTime: nowTxn,
+                        lastActive: nowTxn
+                    };
+                }
+
+                // Check if it's mine
+                if (currentValue.uid === myUid || currentValue.email === myEmail) {
+                    return {
+                        ...currentValue,
+                        uid: myUid,
+                        lastActive: nowTxn
+                    };
+                }
+
+                // Locked by someone else - abort
+                return undefined;
+            }, (error, committed, snapshot) => {
+                if (error) {
+                    console.error('❌ Transaction error:', error);
+                } else if (committed) {
+                    console.log('✅ Lock claimed successfully!');
+                    imActiveController = true;
+                    controllerRef.onDisconnect().remove();
+                    handleControllerLock(false);
+                } else {
+                    console.warn('⛔ Transaction aborted - locked by another user');
+                }
             });
-            handleControllerLock(false);
-            imActiveController = true;
 
         } else if (controller.uid === myUid || controller.email === myEmail) {
             // Case 2: It's ME!

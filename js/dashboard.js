@@ -19,15 +19,10 @@ let isPumpRunning = false;
 let deviceOnlineStatus = false;
 let currentDirection = 'CW';
 let targetRPM = 100;
-let targetFlow = 0;
-let inputMode = 'rpm';
-let dispenseMode = 'rpm';
-
-// Real-time flow calculation
-let pumpStartTime = null;
-let sessionFlowMl = 0;
-let flowUpdateInterval = null;
-let currentFlowRate = 0;
+let targetFlow = 0;  // Separate flow value
+let inputMode = 'rpm';  // 'rpm' or 'flow' - which control is active
+let isFlowInputFocused = false;  // Track if user is typing in flow input
+let dispenseMode = 'rpm'; // 'rpm' or 'volume'
 
 // Firebase listeners
 let liveStatusListener = null;
@@ -50,8 +45,8 @@ const el = {};
 // ========================================
 // INITIALIZATION
 // ========================================
-function initDashboard() {
-    console.log('🚀 initDashboard started - CLEAN VERSION 2.0');
+async function initDashboard() {
+    console.log('Initializing dashboard...');
 
     currentDeviceId = Utils.getSavedDeviceId();
     console.log('📱 Device ID:', currentDeviceId);
@@ -63,8 +58,20 @@ function initDashboard() {
 
     console.log('🔐 Calling Auth.initProtectedPage...');
     Auth.initProtectedPage(async (user) => {
-        console.log('✅ Auth callback fired, user:', user?.uid);
-        currentAuthUser = user;
+        console.log('Auth ready, checking session...');
+
+        // Verify session is still valid (in case user refreshed page)
+        const sessionResult = await Session.claimSession(currentDeviceId);
+        if (!sessionResult.success) {
+            Utils.showError(sessionResult.message);
+            // Redirect back to device selection
+            setTimeout(() => {
+                Utils.navigateTo('device.html');
+            }, 2000);
+            return;
+        }
+
+        console.log('Session verified, initializing UI...');
 
         cacheElements();
         setupEventHandlers();
@@ -72,8 +79,10 @@ function initDashboard() {
 
         // Enable controls first (before Firebase data arrives)
         isPumpRunning = false;
+        inputMode = 'rpm';  // Ensure we start in RPM mode
         setControlsEnabled(true);
         updateDirectionDisplay();
+        setRPM(targetRPM);  // Initialize RPM display and controls
 
         // Update sidebar device ID
         if (el.sidebarDeviceId) {
@@ -299,56 +308,21 @@ function setupEventHandlers() {
     // Flow input handler - with validation based on calibration
     if (el.flowInput) {
         el.flowInput.addEventListener('focus', () => {
+            isFlowInputFocused = true;
             switchInputMode('flow');
+        });
+        el.flowInput.addEventListener('blur', () => {
+            isFlowInputFocused = false;
+            // Validate on blur
+            const val = Math.max(0, parseFloat(el.flowInput.value) || 0);
+            targetFlow = val;
+            if (val > 0) {
+                el.flowInput.value = val;
+            }
         });
         el.flowInput.addEventListener('input', (e) => {
             // Store raw value while typing
             targetFlow = parseFloat(e.target.value) || 0;
-        });
-        el.flowInput.addEventListener('change', (e) => {
-            // Validate and clamp to achievable range on blur/enter
-            const mlPerRev = tubeConfig?.mlPerRev || 0;
-            const maxRPM = 400;
-            const minRPM = 1;
-
-            if (mlPerRev <= 0) {
-                // Not calibrated - can't validate properly
-                e.target.value = '';
-                targetFlow = 0;
-                return;
-            }
-
-            // Calculate flow limits
-            const maxFlow = maxRPM * mlPerRev;
-            const minFlow = minRPM * mlPerRev;
-
-            let val = parseFloat(e.target.value) || 0;
-
-            if (val <= 0) {
-                e.target.value = '';
-                targetFlow = 0;
-                return;
-            }
-
-            // Clamp to valid range
-            val = Math.min(maxFlow, Math.max(minFlow, val));
-
-            // Calculate the actual RPM this would require
-            const calculatedRPM = Math.round(val / mlPerRev);
-
-            // Recalculate the actual achievable flow (nearest valid value)
-            const actualFlow = calculatedRPM * mlPerRev;
-
-            targetFlow = actualFlow;
-            e.target.value = actualFlow.toFixed(2);
-
-            // Also update the RPM display to show corresponding value
-            if (el.rpmInput) {
-                el.rpmInput.value = calculatedRPM;
-            }
-            if (el.rpmSlider) {
-                el.rpmSlider.value = calculatedRPM;
-            }
         });
     }
 
@@ -604,9 +578,17 @@ function updateInputModeDisplay() {
             el.flowDisplayBox.classList.add('editable');
             if (el.flowInput) {
                 el.flowInput.classList.remove('hidden');
-                el.flowInput.value = targetFlow > 0 ? targetFlow : '';
-                // Auto-focus flow input so user can start typing
-                setTimeout(() => el.flowInput.focus(), 50);
+                // Only set value and focus if user is NOT currently typing
+                if (!isFlowInputFocused) {
+                    el.flowInput.value = targetFlow > 0 ? targetFlow : '';
+                    // Auto-focus only on first switch to flow mode
+                    setTimeout(() => {
+                        if (!isFlowInputFocused) {
+                            el.flowInput.focus();
+                            isFlowInputFocused = true;
+                        }
+                    }, 50);
+                }
             }
             if (el.flowValue) el.flowValue.classList.add('hidden');
         }
@@ -1625,20 +1607,19 @@ function monitorActiveController(deviceRef) {
         // 1. Check for BROKEN lock (missing critical fields including lastActive)
         const isBroken = controller && (!controller.uid || !controller.email || !controller.lastActive);
 
-        // 2. Check for STALE lock (inactive for > 3 seconds OR Future Skew)
+        // 2. Check for STALE lock (inactive for > 15 seconds)
         const now = Date.now();
         let isStale = false;
         let timeDiff = 0;
 
         if (controller && controller.lastActive) {
             timeDiff = now - controller.lastActive;
-            // 3000ms timeout. ALSO handles clock skew (if timeDiff is significantly negative)
-            isStale = (timeDiff > 3000) || (timeDiff < -3000);
+            isStale = timeDiff > 3000; // 3 seconds (was 15000)
         }
 
         if (!controller || isBroken || isStale) {
             // Case 1: Free, Broken, or Stale -> Claim it ATOMICALLY!
-            const reason = isBroken ? 'Broken' : (isStale ? `Stale/Skew (${Math.round(timeDiff / 1000)}s)` : 'Free');
+            const reason = isBroken ? 'Broken' : (isStale ? `Stale (${Math.round(timeDiff / 1000)}s inactive)` : 'Free');
             console.log(`🔓 Attempting to claim lock: ${reason}`);
 
             // Use TRANSACTION for atomic claim (prevents race condition)
@@ -1653,13 +1634,10 @@ function monitorActiveController(deviceRef) {
                     };
                 }
 
-                // Check if still stale/broken inside transaction
+                // Check if still stale/broken
                 const nowTxn = Date.now();
-                const txDiff = nowTxn - (currentValue.lastActive || 0);
-
                 const isTxnBroken = !currentValue.uid || !currentValue.email || !currentValue.lastActive;
-                // Check if stale or future-skewed
-                const isTxnStale = (txDiff > 3000) || (txDiff < -3000);
+                const isTxnStale = currentValue.lastActive && (nowTxn - currentValue.lastActive > 3000);
 
                 if (isTxnBroken || isTxnStale) {
                     return {
@@ -1732,6 +1710,10 @@ function handleControllerLock(isLocked, lockedByEmail = '', startTime = null) {
         } else {
             el.userLockModal.classList.remove('active');
         }
+    } else {
+        // Firebase not connected
+        statusClass = 'disconnected';
+        statusText = 'No Connection';
     }
 
     // 2. Toggle Leave Button visibility
@@ -1770,14 +1752,10 @@ function cleanup() {
         });
     }
 
-    if (activeControllerListener) deviceRef.child('activeController').off('value', activeControllerListener);
-    if (activeControllerInterval) clearInterval(activeControllerInterval);
-
-    if (liveStatusListener) deviceRef.child('liveStatus').off('value', liveStatusListener);
-    if (tubeConfigListener) deviceRef.child('tubeConfig').off('value', tubeConfigListener);
-    if (identityListener) deviceRef.child('identity').off('value', identityListener);
-    if (maintenanceListener) deviceRef.child('maintenance').off('value', maintenanceListener);
-    if (connectionListener) deviceRef.child('connection').off('value', connectionListener);
+    // Stop heartbeat (session cleanup is handled in session.js)
+    if (window.Session) {
+        Session.stopHeartbeat();
+    }
 }
 
 window.addEventListener('beforeunload', cleanup);

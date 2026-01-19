@@ -175,6 +175,7 @@ function cacheElements() {
     el.userLockModal = document.getElementById('userLockModal');
     el.lockUserEmail = document.getElementById('lockUserEmail');
     el.exitDashboardBtn = document.getElementById('exitDashboardBtn');
+    el.forceUnlockBtn = document.getElementById('forceUnlockBtn');
     el.leaveDeviceBtn = document.getElementById('leaveDeviceBtn');
 }
 
@@ -404,6 +405,32 @@ function setupEventHandlers() {
                 await ref.remove();
             } catch (e) { console.error(e); }
             Utils.navigateTo('device.html');
+        });
+    }
+
+    // Force Unlock (Manual Override)
+    if (el.forceUnlockBtn) {
+        el.forceUnlockBtn.addEventListener('click', async () => {
+            if (!currentDeviceId || !currentAuthUser) return;
+
+            if (confirm('Are you sure? This will kick out any other user controlling this device.')) {
+                Utils.showLoading('Force unlocking...');
+                try {
+                    const ref = FirebaseApp.getDeviceRef(currentDeviceId).child('activeController');
+                    await ref.set({
+                        uid: currentAuthUser.uid,
+                        email: currentAuthUser.email || 'Unknown',
+                        startTime: Date.now(),
+                        lastActive: Date.now()
+                    });
+                    handleControllerLock(false);
+                    Utils.hideLoading();
+                } catch (e) {
+                    console.error('Force unlock failed', e);
+                    Utils.showError('Unlock failed: ' + e.message);
+                    Utils.hideLoading();
+                }
+            }
         });
     }
 }

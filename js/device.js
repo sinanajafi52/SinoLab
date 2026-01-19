@@ -266,8 +266,8 @@ async function getLinkedDevicesWithInfo() {
             nickname: linkData?.nickname || '',
             linkedAt: linkData?.linkedAt,
             info: info || {},
-            status: status || {},
-            online: status?.online === true,
+            status: conn || {},
+            online: conn?.online === true,
             sessionAvailable: sessionStatus.available,
             sessionMessage: sessionStatus.message
         });

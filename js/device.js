@@ -223,13 +223,16 @@ async function checkDeviceLock(deviceId) {
         const myUid = Auth.getCurrentUserId();
 
         if (controller && controller.uid !== myUid) {
-            // Check for broken lock - Allow entry if data is missing
-            if (!controller.uid || !controller.email) {
-                console.warn('⚠️ Ignoring broken lock in device list check.');
-                return true;
+            // Check for broken lock (missing data) OR stale lock (>15s inactive)
+            const isBroken = !controller.uid || !controller.email || !controller.lastActive;
+            const isStale = controller.lastActive && (Date.now() - controller.lastActive > 15000);
+
+            if (isBroken || isStale) {
+                console.warn('⚠️ Ignoring broken/stale lock in device list check.');
+                return true; // Allow entry - lock will be claimed in dashboard
             }
 
-            // Locked!
+            // Valid active lock by another user - Block entry
             const modal = document.getElementById('userLockModal');
             const emailEl = document.getElementById('lockUserEmail');
             if (modal && emailEl) {

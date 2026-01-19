@@ -1625,19 +1625,20 @@ function monitorActiveController(deviceRef) {
         // 1. Check for BROKEN lock (missing critical fields including lastActive)
         const isBroken = controller && (!controller.uid || !controller.email || !controller.lastActive);
 
-        // 2. Check for STALE lock (inactive for > 15 seconds)
+        // 2. Check for STALE lock (inactive for > 3 seconds OR Future Skew)
         const now = Date.now();
         let isStale = false;
         let timeDiff = 0;
 
         if (controller && controller.lastActive) {
             timeDiff = now - controller.lastActive;
-            isStale = timeDiff > 3000; // 3 seconds (was 15000)
+            // 3000ms timeout. ALSO handles clock skew (if timeDiff is significantly negative)
+            isStale = (timeDiff > 3000) || (timeDiff < -3000);
         }
 
         if (!controller || isBroken || isStale) {
             // Case 1: Free, Broken, or Stale -> Claim it ATOMICALLY!
-            const reason = isBroken ? 'Broken' : (isStale ? `Stale (${Math.round(timeDiff / 1000)}s inactive)` : 'Free');
+            const reason = isBroken ? 'Broken' : (isStale ? `Stale/Skew (${Math.round(timeDiff / 1000)}s)` : 'Free');
             console.log(`🔓 Attempting to claim lock: ${reason}`);
 
             // Use TRANSACTION for atomic claim (prevents race condition)
@@ -1652,10 +1653,13 @@ function monitorActiveController(deviceRef) {
                     };
                 }
 
-                // Check if still stale/broken
+                // Check if still stale/broken inside transaction
                 const nowTxn = Date.now();
+                const txDiff = nowTxn - (currentValue.lastActive || 0);
+
                 const isTxnBroken = !currentValue.uid || !currentValue.email || !currentValue.lastActive;
-                const isTxnStale = currentValue.lastActive && (nowTxn - currentValue.lastActive > 3000);
+                // Check if stale or future-skewed
+                const isTxnStale = (txDiff > 3000) || (txDiff < -3000);
 
                 if (isTxnBroken || isTxnStale) {
                     return {

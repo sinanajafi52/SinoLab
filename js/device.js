@@ -225,7 +225,7 @@ async function checkDeviceLock(deviceId) {
         if (controller && controller.uid !== myUid) {
             // Check for broken lock (missing data) OR stale lock (>15s inactive)
             const isBroken = !controller.uid || !controller.email || !controller.lastActive;
-            const isStale = controller.lastActive && (Date.now() - controller.lastActive > 15000);
+            const isStale = controller.lastActive && (Date.now() - controller.lastActive > 3000); // 3 seconds
 
             if (isBroken || isStale) {
                 console.warn('⚠️ Ignoring broken/stale lock in device list check.');

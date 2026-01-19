@@ -1605,7 +1605,7 @@ function monitorActiveController(deviceRef) {
 
         if (controller && controller.lastActive) {
             timeDiff = now - controller.lastActive;
-            isStale = timeDiff > 15000;
+            isStale = timeDiff > 3000; // 3 seconds (was 15000)
         }
 
         if (!controller || isBroken || isStale) {

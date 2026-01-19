@@ -1585,7 +1585,9 @@ function monitorActiveController(deviceRef) {
     activeControllerInterval = setInterval(() => {
         if (imActiveController) {
             controllerRef.update({
-                lastActive: firebase.database.ServerValue.TIMESTAMP
+                lastActive: Date.now(), // Use client time to match reader check
+                email: myEmail,
+                uid: myUid
             }).catch(err => console.error("Heartbeat failed", err));
         }
     }, 5000); // Every 5 seconds
@@ -1593,23 +1595,29 @@ function monitorActiveController(deviceRef) {
     activeControllerListener = controllerRef.on('value', (snapshot) => {
         const controller = snapshot.val();
 
-        // 1. Check for BROKEN lock (missing fields)
+        // 1. Check for BROKEN lock
         const isBroken = controller && (!controller.uid || !controller.email);
 
         // 2. Check for STALE lock (inactive for > 15 seconds)
         const now = Date.now();
-        const isStale = controller && controller.lastActive && (now - controller.lastActive > 15000);
+        let isStale = false;
+        let timeDiff = 0;
+
+        if (controller && controller.lastActive) {
+            timeDiff = now - controller.lastActive;
+            isStale = timeDiff > 15000;
+        }
 
         if (!controller || isBroken || isStale) {
             // Case 1: Free, Broken, or Stale -> Claim it!
-            const reason = isBroken ? 'Broken Lock' : (isStale ? 'Stale Lock' : 'Free');
-            console.log(`🔓 claiming control (${reason})...`);
+            const reason = isBroken ? 'Broken' : (isStale ? `Stale (${Math.round(timeDiff / 1000)}s inactive)` : 'Free');
+            console.log(`🔓 Claiming lock: ${reason}`);
 
             controllerRef.set({
                 uid: myUid,
                 email: myEmail,
                 startTime: Date.now(),
-                lastActive: firebase.database.ServerValue.TIMESTAMP
+                lastActive: Date.now()
             }).then(() => {
                 controllerRef.onDisconnect().remove();
             });
@@ -1621,16 +1629,18 @@ function monitorActiveController(deviceRef) {
             imActiveController = true;
             console.log('✅ Active controller.');
 
-            // Sync UID if needed
-            if (controller.uid !== myUid) controllerRef.update({ uid: myUid });
+            // Sync UID/Email if needed
+            if (controller.uid !== myUid) {
+                controllerRef.update({ uid: myUid, lastActive: Date.now() });
+            }
 
             controllerRef.onDisconnect().remove();
             handleControllerLock(false);
 
         } else {
-            // Case 3: Locked by another active user
+            // Case 3: Locked by another
             imActiveController = false;
-            console.warn(`⛔ Start: ${controller.startTime}, LastActive: ${controller.lastActive}`);
+            console.warn(`⛔ Locked by ${controller.email}. Inactive for: ${Math.round(timeDiff / 1000)}s`);
             handleControllerLock(true, controller.email, controller.startTime);
         }
     });

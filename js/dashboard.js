@@ -1573,29 +1573,35 @@ function monitorActiveController(deviceRef) {
                 email: myEmail,
                 startTime: Date.now()
             }).then(() => {
-                // IMPORTANT: Set onDisconnect to remove lock if we crash/close
                 controllerRef.onDisconnect().remove();
             });
             handleControllerLock(false);
         } else if (controller.uid === myUid) {
             // Case 2: I am the controller. All good.
-            // Ensure onDisconnect is still set (in case of reconnect)
+            console.log('✅ I am the active controller.');
             controllerRef.onDisconnect().remove();
             handleControllerLock(false);
         } else {
             // Case 3: Someone else is controlling. LOCK UI.
-            console.warn(`⛔ Device locked by ${controller.email}`);
-            handleControllerLock(true, controller.email);
+            console.warn(`⛔ Device locked by ${controller.email} (UID: ${controller.uid}) vs My UID: ${myUid}`);
+            handleControllerLock(true, controller.email, controller.startTime);
         }
     });
 }
 
-function handleControllerLock(isLocked, lockedByEmail = '') {
+function handleControllerLock(isLocked, lockedByEmail = '', startTime = null) {
     if (!el.userLockModal) return;
 
     if (isLocked) {
         // Show blocking modal
-        if (el.lockUserEmail) el.lockUserEmail.textContent = lockedByEmail;
+        if (el.lockUserEmail) {
+            let msg = lockedByEmail;
+            if (startTime) {
+                const date = new Date(startTime);
+                msg += `\n(Since ${date.toLocaleTimeString()})`;
+            }
+            el.lockUserEmail.textContent = msg;
+        }
         el.userLockModal.classList.add('active');
     } else {
         // Hide modal

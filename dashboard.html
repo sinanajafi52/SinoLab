@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#facc15">
     <meta name="description" content="SinoLab - IoT Device Control">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="SinoLab">
 
@@ -1028,7 +1028,7 @@
             background: rgba(20, 20, 20, 0.95);
             backdrop-filter: blur(15px);
             border-right: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+            box-shadow: 4px 0 10px rgba(0, 0, 0, 0.3);
             overflow-x: hidden !important;
             overflow-y: auto;
         }
@@ -1123,6 +1123,103 @@
         .sidebar-action-btn svg {
             flex-shrink: 0;
         }
+
+        /* Custom Modal Styles */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .modal-content {
+            background: linear-gradient(145deg, #1a1a1a 0%, #0f0f0f 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 12px;
+        }
+
+        .modal-message {
+            color: #aaa;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin-bottom: 24px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        .modal-actions .btn {
+            min-width: 100px;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .modal-btn-yes {
+            background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+            color: #000;
+        }
+
+        .modal-btn-no {
+            border-color: rgba(255, 255, 255, 0.2);
+            color: #aaa;
+        }
+
+        .modal-btn-no:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
     </style>
 </head>
 
@@ -1179,9 +1276,21 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="sidebar-device-info">
-                    <span id="sidebarDeviceId" class="sidebar-device-id">--</span>
-                    <span id="sidebarConnectionStatus" class="sidebar-connection connecting">Connecting...</span>
+                <div class="sidebar-device-info"
+                    style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span id="sidebarDeviceId" class="sidebar-device-id">--</span>
+                        <span id="sidebarConnectionStatus" class="sidebar-connection connecting">Connecting...</span>
+                    </div>
+                    <button id="leaveDeviceBtn" class="sidebar-action-btn"
+                        style="color: #ef4444; border-color: rgba(239,68,68,0.3); display: none;" title="Exit Control">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                    </button>
                 </div>
                 <div class="sidebar-actions">
                     <button id="changeDeviceBtn" class="sidebar-action-btn" title="Change Device"><svg
@@ -1280,7 +1389,7 @@
                                 <button type="button" id="directionBtn" class="direction-btn">
                                     <span id="directionArrow" class="direction-arrow">↻</span>
                                 </button>
-                                <span id="directionLabel" class="direction-label">CW</span>
+
                             </div>
 
                             <!-- Total Flow -->
@@ -1288,8 +1397,8 @@
                                 <div class="pump-section-label">Total Flow</div>
                                 <div class="total-flow-box">
                                     <span>
-                                        <span id="totalFlowValue" class="total-flow-value">0.00</span>
-                                        <span class="total-flow-unit">mL</span>
+                                        <span id="totalFlowValue" class="total-flow-value">0.000</span>
+                                        <span class="total-flow-unit">L</span>
                                     </span>
                                 </div>
                             </div>
@@ -1303,24 +1412,7 @@
                     </div>
 
                     <!-- Status Panel -->
-                    <div class="status-panel">
-                        <div class="status-row">
-                            <span class="status-label">Status</span>
-                            <span id="pumpStatus" class="status-value stopped">Stopped</span>
-                        </div>
-                        <div class="status-row">
-                            <span class="status-label">Current RPM</span>
-                            <span id="currentRPM" class="status-value">0</span>
-                        </div>
-                        <div class="status-row">
-                            <span class="status-label">Control Mode</span>
-                            <span id="controlMode" class="status-value">LOCAL</span>
-                        </div>
-                        <div class="status-row">
-                            <span class="status-label">Session Dispensed</span>
-                            <span id="sessionDispensed" class="status-value">0.0 mL</span>
-                        </div>
-                    </div>
+
                 </div>
             </div>
 
@@ -1446,26 +1538,28 @@
                 </div>
 
                 <div class="page-content">
-                    <!-- Session Stats -->
+                    <!-- Tube Maintenance -->
                     <div class="info-section">
-                        <h3 class="info-section-title">📊 Session Statistics</h3>
+                        <h3 class="info-section-title">🔧 Tube Maintenance</h3>
                         <div class="info-card">
                             <div class="info-row">
-                                <span class="info-label">Session Volume</span>
-                                <span class="info-value" id="infoSessionVolume">0.00 mL</span>
+                                <span class="info-label">Last Tube Change</span>
+                                <span class="info-value" id="infoLastTubeChange">Not recorded</span>
                             </div>
                             <div class="info-row">
-                                <span class="info-label">Total Dispensed</span>
-                                <span class="info-value" id="infoTotalDispensed">0.00 mL</span>
+                                <span class="info-label">Runtime Since Change</span>
+                                <span class="info-value" id="infoRuntimeSinceChange">--</span>
                             </div>
                         </div>
                         <div class="info-actions">
-                            <button id="preFlushBtn" class="btn btn-primary btn-full">
-                                🚿 Pre-Flush
+                            <button id="confirmTubeChangeBtn" class="btn btn-primary btn-full">
+                                🔧 Confirm Tube Change
                             </button>
-                            <p class="info-hint">Run a quick flush to prime the tubing</p>
+                            <p class="info-hint">Click to record a new tube installation</p>
                         </div>
                     </div>
+
+
 
                     <div class="info-section">
                         <h3 class="info-section-title">📱 Device Information</h3>
@@ -1473,6 +1567,10 @@
                             <div class="info-row">
                                 <span class="info-label">Device Name</span>
                                 <span class="info-value" id="infoDeviceName">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Control Mode</span>
+                                <span class="info-value" id="controlMode">--</span>
                             </div>
                             <div class="info-row">
                                 <span class="info-label">Device ID</span>
@@ -1534,11 +1632,39 @@
         </main>
     </div>
 
+    <!-- User Lock Modal (Blocking) -->
+    <div id="userLockModal" class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-icon" style="font-size: 4rem; margin-bottom: 20px; animation: pulse 2s infinite;">⛔</div>
+            <h3 class="modal-title" style="color: #ef4444; font-size: 1.5rem; margin-bottom: 10px;">Access Denied</h3>
+            <div class="modal-message" style="color: #cbd5e1; margin-bottom: 25px; line-height: 1.6;">
+                <p style="margin-bottom: 15px;">This device is currently being controlled by another user.</p>
+                <div id="lockUserEmail" class="highlight-box"
+                    style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 15px; border-radius: 12px; font-family: monospace; font-weight: bold; margin-bottom: 15px;">
+                    --
+                </div>
+                <p style="font-size: 0.875rem; opacity: 0.7;">Simultaneous control is disabled to prevent data
+                    conflicts.</p>
+            </div>
+            <div class="modal-actions" style="display: flex; flex-direction: column; gap: 10px;">
+                <button id="forceUnlockBtn" class="btn btn-full" 
+                    style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #ef4444;">
+                    🔨 FORCE UNLOCK (Use with Caution)
+                </button>
+                <button id="exitDashboardBtn" class="btn btn-secondary btn-full"
+                    style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white;">
+                    🔙 Back to My Devices
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="js/firebase-config.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/session.js"></script>
     <script src="js/device.js"></script>
+    <script src="js/migration.js"></script>
     <script src="js/dashboard.js"></script>
 
     <script>

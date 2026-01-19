@@ -6,14 +6,18 @@
 // ========================================
 // STATE
 // ========================================
+// State
 let currentDeviceId = null;
-let deviceStatus = null;
-let deviceInfo = null;
-let deviceSettings = null;
+let liveStatus = null;      // New: liveStatus node
+let tubeConfig = null;      // New: tubeConfig node
+let identity = null;        // New: identity node
+let connection = null;      // New: connection node
+let maintenance = null;     // New: maintenance node
+
 let isCalibrated = false;
 let isPumpRunning = false;
-let deviceOnlineStatus = false;  // Renamed to avoid conflict with device.js isDeviceOnline function
-let currentDirection = 'CW'; // CW or CCW
+let deviceOnlineStatus = false;
+let currentDirection = 'CW';
 let targetRPM = 100;
 let targetFlow = 0;  // Separate flow value
 let inputMode = 'rpm';  // 'rpm' or 'flow' - which control is active
@@ -21,14 +25,19 @@ let isFlowInputFocused = false;  // Track if user is typing in flow input
 let dispenseMode = 'rpm'; // 'rpm' or 'volume'
 
 // Firebase listeners
-let statusListener = null;
-let settingsListener = null;
-let infoListener = null;
-let controlListener = null;  // For control node (mode, acknowledged)
+let liveStatusListener = null;
+let tubeConfigListener = null;
+let identityListener = null;
+let maintenanceListener = null;
 let connectionListener = null;
 
-// Control state from control node
-let controlMode = 'LOCAL';
+// Lock System
+let activeControllerListener = null;
+let activeControllerInterval = null; // Heartbeat
+let currentAuthUser = null;
+let imActiveController = false;
+
+// Control state (Removed controlMode as it's no longer used)
 
 // UI Elements
 const el = {};
@@ -40,11 +49,14 @@ async function initDashboard() {
     console.log('Initializing dashboard...');
 
     currentDeviceId = Utils.getSavedDeviceId();
+    console.log('📱 Device ID:', currentDeviceId);
+
     if (!currentDeviceId) {
         Utils.navigateTo('device.html');
         return;
     }
 
+    console.log('🔐 Calling Auth.initProtectedPage...');
     Auth.initProtectedPage(async (user) => {
         console.log('Auth ready, checking session...');
 
@@ -80,9 +92,14 @@ async function initDashboard() {
         // Setup change device button
         Device.setupChangeDeviceButton();
 
+        // Check for database migration
+        if (window.Migration && currentDeviceId) {
+            await window.Migration.checkAndMigrate(currentDeviceId);
+        }
+
         // Subscribe to Firebase after UI is ready
         subscribeToDevice();
-        setupConnectionMonitoring();
+        // setupConnectionMonitoring removed (integrated into subscribeToDevice)
 
         console.log('Dashboard initialized successfully');
     });
@@ -106,7 +123,7 @@ function cacheElements() {
     el.flowInput = document.getElementById('flowInput');
     el.directionBtn = document.getElementById('directionBtn');
     el.directionArrow = document.getElementById('directionArrow');
-    el.directionLabel = document.getElementById('directionLabel');
+
     el.totalFlowValue = document.getElementById('totalFlowValue');
     el.startStopBtn = document.getElementById('startStopBtn');
     el.startStopIcon = document.getElementById('startStopIcon');
@@ -114,10 +131,9 @@ function cacheElements() {
     el.lastUpdated = document.getElementById('lastUpdated');
 
     // Status info panel
-    el.pumpStatus = document.getElementById('pumpStatus');
-    el.currentRPM = document.getElementById('currentRPM');
+
     el.controlMode = document.getElementById('controlMode');
-    el.sessionDispensed = document.getElementById('sessionDispensed');
+
 
     // Dispense page - Mode tabs
     el.rpmModeTab = document.getElementById('rpmModeTab');
@@ -143,10 +159,10 @@ function cacheElements() {
     el.estimatedTime = document.getElementById('estimatedTime');
     el.volumeDispenseBtn = document.getElementById('volumeDispenseBtn');
 
-    // System Info - Session Stats
-    el.infoSessionVolume = document.getElementById('infoSessionVolume');
-    el.infoTotalDispensed = document.getElementById('infoTotalDispensed');
-    el.preFlushBtn = document.getElementById('preFlushBtn');
+    // System Info - Tube Maintenance
+    el.infoLastTubeChange = document.getElementById('infoLastTubeChange');
+    el.infoRuntimeSinceChange = document.getElementById('infoRuntimeSinceChange');
+    el.confirmTubeChangeBtn = document.getElementById('confirmTubeChangeBtn');
 
     // System Info - Device
     el.infoDeviceName = document.getElementById('infoDeviceName');
@@ -158,11 +174,18 @@ function cacheElements() {
     el.infoRuntime = document.getElementById('infoRuntime');
 
     // System Info - Calibration
-    el.settingsTube = document.getElementById('settingsTube');
+    el.settingsTubeName = document.getElementById('settingsTube');
     el.settingsMlPerRev = document.getElementById('settingsMlPerRev');
     el.settingsCalibrationType = document.getElementById('settingsCalibrationType');
     el.settingsLastCalibrated = document.getElementById('settingsLastCalibrated');
     el.settingsAntiDrip = document.getElementById('settingsAntiDrip');
+
+    // Lock Modal
+    el.userLockModal = document.getElementById('userLockModal');
+    el.lockUserEmail = document.getElementById('lockUserEmail');
+    el.exitDashboardBtn = document.getElementById('exitDashboardBtn');
+    el.forceUnlockBtn = document.getElementById('forceUnlockBtn');
+    el.leaveDeviceBtn = document.getElementById('leaveDeviceBtn');
 }
 
 // ========================================
@@ -282,7 +305,7 @@ function setupEventHandlers() {
         el.rpmDispenseBtn.addEventListener('click', dispenseRpmBased);
     }
 
-    // Flow input handler - independent from RPM
+    // Flow input handler - with validation based on calibration
     if (el.flowInput) {
         el.flowInput.addEventListener('focus', () => {
             isFlowInputFocused = true;
@@ -298,7 +321,7 @@ function setupEventHandlers() {
             }
         });
         el.flowInput.addEventListener('input', (e) => {
-            // Just store the flow value - don't convert to RPM
+            // Store raw value while typing
             targetFlow = parseFloat(e.target.value) || 0;
         });
     }
@@ -331,9 +354,58 @@ function setupEventHandlers() {
         el.volumeDispenseBtn.addEventListener('click', dispenseVolume);
     }
 
-    // Pre-Flush button
-    if (el.preFlushBtn) {
-        el.preFlushBtn.addEventListener('click', preFlush);
+
+
+    // Tube Change confirmation button
+    if (el.confirmTubeChangeBtn) {
+        el.confirmTubeChangeBtn.addEventListener('click', confirmTubeChange);
+    }
+
+    // Exit on Lock
+    if (el.exitDashboardBtn) {
+        el.exitDashboardBtn.addEventListener('click', () => {
+            Utils.navigateTo('device.html');
+        });
+    }
+
+    // Leave Device (Active Release)
+    if (el.leaveDeviceBtn) {
+        el.leaveDeviceBtn.addEventListener('click', async () => {
+            if (!currentDeviceId) return;
+            Utils.showLoading('Releasing control...');
+            try {
+                // Remove lock explicitly
+                const ref = FirebaseApp.getDeviceRef(currentDeviceId).child('activeController');
+                await ref.remove();
+            } catch (e) { console.error(e); }
+            Utils.navigateTo('device.html');
+        });
+    }
+
+    // Force Unlock (Manual Override)
+    if (el.forceUnlockBtn) {
+        el.forceUnlockBtn.addEventListener('click', async () => {
+            if (!currentDeviceId || !currentAuthUser) return;
+
+            if (confirm('Are you sure? This will kick out any other user controlling this device.')) {
+                Utils.showLoading('Force unlocking...');
+                try {
+                    const ref = FirebaseApp.getDeviceRef(currentDeviceId).child('activeController');
+                    await ref.set({
+                        uid: currentAuthUser.uid,
+                        email: currentAuthUser.email || 'Unknown',
+                        startTime: Date.now(),
+                        lastActive: Date.now()
+                    });
+                    handleControllerLock(false);
+                    Utils.hideLoading();
+                } catch (e) {
+                    console.error('Force unlock failed', e);
+                    Utils.showError('Unlock failed: ' + e.message);
+                    Utils.hideLoading();
+                }
+            }
+        });
     }
 }
 
@@ -341,6 +413,10 @@ function setupEventHandlers() {
 // DISPENSE MODE SWITCHING
 // ========================================
 function switchDispenseMode(mode) {
+    if (isPumpRunning) {
+        showRunningLockMessage();
+        return;
+    }
     dispenseMode = mode;
 
     if (mode === 'rpm') {
@@ -451,9 +527,7 @@ function updateDirectionDisplay() {
     if (el.directionArrow) {
         el.directionArrow.textContent = currentDirection === 'CW' ? '↻' : '↺';
     }
-    if (el.directionLabel) {
-        el.directionLabel.textContent = currentDirection;
-    }
+
 }
 
 // ========================================
@@ -487,7 +561,7 @@ function updateInputModeDisplay() {
         }
 
         // Update flow display from RPM
-        const mlPerRev = deviceSettings?.mlPerRev || 0;
+        const mlPerRev = tubeConfig?.mlPerRev || 0;
         const flow = (mlPerRev > 0 && targetRPM > 0) ? targetRPM * mlPerRev : 0;
         if (el.flowValue) {
             el.flowValue.textContent = flow > 0 ? flow.toFixed(2) : '--';
@@ -527,15 +601,272 @@ function updateInputModeDisplay() {
 function updateFlowDisplay() {
     // Only auto-update flow from RPM when in RPM mode
     if (inputMode === 'rpm') {
-        const mlPerRev = deviceSettings?.mlPerRev || 0;
+        const mlPerRev = tubeConfig?.mlPerRev || 0;
         const flow = (mlPerRev > 0 && targetRPM > 0) ? targetRPM * mlPerRev : 0;
+
+        currentFlowRate = flow; // Store for total calculation
 
         if (el.flowValue) {
             el.flowValue.textContent = flow > 0 ? flow.toFixed(2) : '--';
         }
+    } else {
+        // In flow mode, use targetFlow
+        currentFlowRate = targetFlow;
     }
 
     updateInputModeDisplay();
+}
+
+// ========================================
+// REAL-TIME TOTAL FLOW CALCULATION
+// ========================================
+function startFlowTracking() {
+    if (flowUpdateInterval) return; // Already tracking
+
+    pumpStartTime = Date.now();
+    sessionFlowMl = 0;
+
+    // Update every 100ms for smooth display
+    flowUpdateInterval = setInterval(() => {
+        updateTotalFlowDisplay();
+    }, 100);
+
+    updateTotalFlowDisplay();
+}
+
+function stopFlowTracking() {
+    if (flowUpdateInterval) {
+        clearInterval(flowUpdateInterval);
+        flowUpdateInterval = null;
+    }
+
+    // Reset to zero when pump stops
+    sessionFlowMl = 0;
+    pumpStartTime = null;
+
+    if (el.totalFlowValue) {
+        el.totalFlowValue.textContent = '0.00';
+    }
+}
+
+function updateTotalFlowDisplay() {
+    if (!isPumpRunning || !pumpStartTime) {
+        if (el.totalFlowValue) {
+            el.totalFlowValue.textContent = '0.00';
+        }
+        return;
+    }
+
+    if (currentFlowRate <= 0) {
+        return;
+    }
+
+    // Time elapsed in minutes
+    const elapsedMs = Date.now() - pumpStartTime;
+    const elapsedMin = elapsedMs / 60000;
+
+    // Total mL = flow rate (mL/min) * time (min)
+    sessionFlowMl = currentFlowRate * elapsedMin;
+
+    // Convert to Liters and display with 3 decimals
+    const sessionLiters = sessionFlowMl / 1000;
+
+    if (el.totalFlowValue) {
+        el.totalFlowValue.textContent = sessionLiters.toFixed(2);
+    }
+
+    // Update runtime display as well
+    updateTubeMaintenanceUI();
+}
+
+// ========================================
+// TUBE CHANGE MANAGEMENT
+// ========================================
+
+// Runtime tracking variables
+let pumpRuntimeStart = null;
+let runtimeUpdateInterval = null;
+let localUiInterval = null;
+
+function confirmTubeChange() {
+    if (!currentDeviceId) {
+        Utils.showWarning('No device connected');
+        return;
+    }
+
+    // Show custom confirmation modal
+    showTubeChangeModal();
+}
+
+function showTubeChangeModal() {
+    // Create modal backdrop
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.id = 'tubeChangeModal';
+    backdrop.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-icon">🔧</div>
+            <h3 class="modal-title">Confirm Tube Change</h3>
+            <p class="modal-message">Are you sure you have changed the tube? This will reset the runtime counter.</p>
+            <div class="modal-actions">
+                <button class="btn btn-outline modal-btn-no" id="tubeChangeNo">No</button>
+                <button class="btn btn-primary modal-btn-yes" id="tubeChangeYes">Yes</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(backdrop);
+
+    // Add event listeners
+    document.getElementById('tubeChangeNo').addEventListener('click', () => {
+        closeTubeChangeModal();
+    });
+
+    document.getElementById('tubeChangeYes').addEventListener('click', async () => {
+        await saveTubeChange();
+        closeTubeChangeModal();
+    });
+
+    // Close on backdrop click
+    backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) {
+            closeTubeChangeModal();
+        }
+    });
+}
+
+function closeTubeChangeModal() {
+    const modal = document.getElementById('tubeChangeModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+async function saveTubeChange() {
+    try {
+        const now = Date.now();
+
+        // Update maintenance node
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance').update({
+            lastTubeChange: now,
+            tubeRuntimeSeconds: 0
+        });
+
+        Utils.showSuccess('Tube change recorded successfully');
+        // UI update is handled by listener
+    } catch (error) {
+        console.error('Error recording tube change:', error);
+        Utils.showError('Failed to record tube change');
+    }
+}
+
+// Start tracking runtime when pump starts
+// Start tracking runtime when pump starts
+function startRuntimeTracking() {
+    pumpRuntimeStart = Date.now();
+
+    // DB Update every 10 seconds
+    if (runtimeUpdateInterval) clearInterval(runtimeUpdateInterval);
+    runtimeUpdateInterval = setInterval(() => {
+        updateRuntimeInDB();
+    }, 10000);
+
+    // Local UI update every 1 second
+    if (localUiInterval) clearInterval(localUiInterval);
+    localUiInterval = setInterval(() => {
+        updateTubeMaintenanceUI();
+        updateMaintenanceInfo();
+    }, 1000);
+}
+
+// Stop tracking and save final runtime
+function stopRuntimeTracking() {
+    if (runtimeUpdateInterval) {
+        clearInterval(runtimeUpdateInterval);
+        runtimeUpdateInterval = null;
+    }
+    if (localUiInterval) {
+        clearInterval(localUiInterval);
+        localUiInterval = null;
+    }
+
+    // Save final runtime
+    if (pumpRuntimeStart) {
+        updateRuntimeInDB();
+        pumpRuntimeStart = null;
+    }
+
+    // Final UI update
+    updateTubeMaintenanceUI();
+    updateMaintenanceInfo();
+}
+
+// Update runtime in database
+async function updateRuntimeInDB() {
+    if (!currentDeviceId || !pumpRuntimeStart) return;
+
+    try {
+        // Calculate elapsed seconds since pump started
+        const elapsedSeconds = Math.floor((Date.now() - pumpRuntimeStart) / 1000);
+
+        if (elapsedSeconds < 1) return;
+
+        // Update tube runtime
+        const refTube = FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance/tubeRuntimeSeconds');
+        await refTube.transaction((currentVal) => {
+            return (currentVal || 0) + elapsedSeconds;
+        });
+
+        // Update total runtime
+        const refTotal = FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance/totalRuntimeSeconds');
+        await refTotal.transaction((currentVal) => {
+            return (currentVal || 0) + elapsedSeconds;
+        });
+
+        // Reset start time for next interval
+        pumpRuntimeStart = Date.now();
+
+    } catch (error) {
+        console.error('Error updating runtime:', error);
+    }
+}
+
+function updateTubeMaintenanceUI() {
+    // maintenance object is global state now
+    if (!maintenance) return;
+
+    const lastTubeChange = maintenance.lastTubeChange || 0;
+
+    // Base runtime from DB
+    let totalSeconds = maintenance.tubeRuntimeSeconds || 0;
+
+    // Add volatile elapsed time if running
+    if (isPumpRunning && pumpRuntimeStart) {
+        const elapsed = Math.floor((Date.now() - pumpRuntimeStart) / 1000);
+        totalSeconds += elapsed;
+    }
+
+    if (el.infoLastTubeChange) {
+        if (lastTubeChange > 0) {
+            el.infoLastTubeChange.textContent = new Date(lastTubeChange).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } else {
+            el.infoLastTubeChange.textContent = 'Not recorded';
+        }
+    }
+
+    if (el.infoRuntimeSinceChange) {
+        // Convert seconds to readable format
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = Math.floor(totalSeconds % 60);
+        el.infoRuntimeSinceChange.textContent = `${hours}h ${minutes}m ${seconds}s`;
+    }
 }
 
 // ========================================
@@ -543,6 +874,13 @@ function updateFlowDisplay() {
 // ========================================
 async function togglePump() {
     console.log('togglePump called, isPumpRunning:', isPumpRunning);
+
+    // Safety check for connection
+    if (!connection || !connection.online) {
+        Utils.showWarning('Device is offline');
+        return;
+    }
+
     if (isPumpRunning) {
         await stopPump();
     } else {
@@ -558,14 +896,17 @@ async function startPump() {
 
     // Calculate RPM based on input mode
     let rpmToUse = targetRPM;
+    let flowRateVal = 0;
+
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
 
     if (inputMode === 'flow') {
         // Convert flow to RPM
-        const mlPerRev = deviceSettings?.mlPerRev || 0;
         if (mlPerRev > 0 && targetFlow > 0) {
             rpmToUse = Math.min(400, Math.max(1, Math.round(targetFlow / mlPerRev)));
+            flowRateVal = targetFlow;
         } else {
-            Utils.showWarning('Please set Flow higher than 0');
+            Utils.showWarning('Please set Flow higher than 0 and ensure device is calibrated');
             return;
         }
     } else {
@@ -573,22 +914,25 @@ async function startPump() {
             Utils.showWarning('Please set RPM higher than 0');
             return;
         }
+        // Calculate flow rate if calibrated
+        if (mlPerRev > 0) {
+            flowRateVal = rpmToUse * mlPerRev;
+        }
     }
 
     // Optimistic UI update first for responsiveness
     setPumpRunning(true);
 
     try {
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
-            command: 'START',
-            rpm: rpmToUse,
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+            activeMode: 'STATUS',
+            inputMode: inputMode.toUpperCase(),
+            currentRPM: rpmToUse,
+            currentFlowRate: flowRateVal > 0 ? flowRateVal : null,
             direction: currentDirection,
-            onTime: 0,
-            offTime: 0,
-            targetVolume: 0,
-            issuedBy: Auth.getCurrentUserId(),
-            issuedAt: Date.now(),
-            acknowledged: false
+            acknowledged: false,
+            lastIssuedBy: Auth.getCurrentUserId(),
+            lastUpdated: new Date().toISOString()
         });
 
         Utils.showSuccess('Pump started');
@@ -607,11 +951,11 @@ async function stopPump() {
     setPumpRunning(false);
 
     try {
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').update({
-            command: 'STOP',
-            issuedBy: Auth.getCurrentUserId(),
-            issuedAt: Date.now(),
-            acknowledged: false
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+            activeMode: 'NONE',
+            acknowledged: false,
+            lastIssuedBy: Auth.getCurrentUserId(),
+            lastUpdated: new Date().toISOString()
         });
 
         Utils.showSuccess('Pump stopped');
@@ -619,7 +963,8 @@ async function stopPump() {
         console.error('Error stopping pump:', error);
         // Revert UI on error
         setPumpRunning(true);
-        Utils.showError('Failed to stop pump. Check connection.');
+        // Maybe don't show error for stop if it was just connection glitch, but good to know
+        Utils.showError('Failed to stop pump (Connection error)');
     }
 }
 
@@ -682,6 +1027,15 @@ function setPumpRunning(running) {
     setControlsEnabled(!running);
     updateFlowDisplay();
     updateControlsState();
+
+    // Start/stop real-time flow tracking and runtime tracking
+    if (running) {
+        startFlowTracking();
+        startRuntimeTracking();
+    } else {
+        stopFlowTracking();
+        stopRuntimeTracking();
+    }
 }
 
 function setControlsEnabled(enabled) {
@@ -731,26 +1085,31 @@ function setControlsEnabled(enabled) {
  * Update controls state based on device online status and calibration
  */
 function updateControlsState() {
-    // Pre-Flush button - always clickable to enable stop functionality
-    if (el.preFlushBtn) {
-        if (isPumpRunning) {
-            el.preFlushBtn.textContent = '⏹ Stop';
-            el.preFlushBtn.classList.add('running');
-        } else {
-            el.preFlushBtn.textContent = '🚿 Pre-Flush';
-            el.preFlushBtn.classList.remove('running');
-        }
-        el.preFlushBtn.disabled = false;
-    }
+    const isOnline = connection && connection.online;
 
-    // Dispense buttons
-    // Allow clicking dispense buttons while running to enable "Stop" functionality
-    if (el.rpmDispenseBtn) {
-        el.rpmDispenseBtn.disabled = false;
+    // Only lock ACTION buttons when offline, not input controls
+    // Users should be able to adjust RPM/Flow even before connecting
+    const actionButtons = [
+        el.startStopBtn,
+        el.rpmDispenseBtn,
+        el.volumeDispenseBtn
+    ];
+
+    // Disable/Enable action buttons based on connection
+    actionButtons.forEach(btn => {
+        if (btn) btn.disabled = !isOnline;
+    });
+
+    // Dispense tabs - always enabled, but volume tab depends on calibration
+    if (el.rpmModeTab) {
+        el.rpmModeTab.classList.remove('disabled');
     }
+    // Volume tab is handled in checkCalibration
+
+    // Volume dispense button
     if (el.volumeDispenseBtn) {
-        // Volume dispense requires calibration, but we allow stop if running
-        el.volumeDispenseBtn.disabled = (!isPumpRunning && !isCalibrated);
+        // Volume dispense requires calibration AND connection
+        el.volumeDispenseBtn.disabled = !isOnline || !isCalibrated;
     }
 
     // Update calibration warning visibility
@@ -798,16 +1157,20 @@ async function dispenseRpmBased() {
     try {
         Utils.showLoading('Starting dispense...');
 
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
-            command: 'DISPENSE_TIMED',
+        // 1. Set parameters
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('rpmDispense').set({
             rpm: rpm,
-            direction: direction,
             onTime: onTime * 1000, // Convert to ms
             offTime: offTime * 1000, // Convert to ms
-            targetVolume: 0,
-            issuedBy: Auth.getCurrentUserId(),
-            issuedAt: Date.now(),
-            acknowledged: false
+            direction: direction
+        });
+
+        // 2. Trigger action
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+            activeMode: 'RPM',
+            acknowledged: false,
+            lastIssuedBy: Auth.getCurrentUserId(),
+            lastUpdated: new Date().toISOString()
         });
 
         // Optimistic UI update
@@ -833,7 +1196,7 @@ function updateEstimatedTime() {
     if (!el.estimatedTime) return;
 
     const volume = parseFloat(el.volumeInput?.value) || 0;
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
 
     const valueEl = el.estimatedTime.querySelector('.estimation-value');
     const labelEl = el.estimatedTime.querySelector('.estimation-label');
@@ -850,7 +1213,7 @@ function updateEstimatedTime() {
 
 function updateMaxVolume() {
     // Calculate max volume based on 400 RPM limit
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
     if (mlPerRev > 0 && el.volumeInput) {
         // Max volume per minute at 400 RPM
         const maxFlowPerMin = 400 * mlPerRev;
@@ -894,16 +1257,19 @@ async function dispenseVolume() {
     setPumpRunning(true);
 
     try {
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
-            command: 'DISPENSE_VOLUME',
-            rpm: VOLUME_DISPENSE_RPM,
-            direction: direction,
-            onTime: 0,
-            offTime: offTime * 1000, // Convert to ms
+        // 1. Set parameters
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('volumeDispense').set({
             targetVolume: volume,
-            issuedBy: Auth.getCurrentUserId(),
-            issuedAt: Date.now(),
-            acknowledged: false
+            offTime: offTime * 1000, // Convert to ms
+            direction: direction
+        });
+
+        // 2. Trigger action
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+            activeMode: 'VOLUME',
+            acknowledged: false,
+            lastIssuedBy: Auth.getCurrentUserId(),
+            lastUpdated: new Date().toISOString()
         });
 
         Utils.showSuccess(`Dispensing ${volume} mL`);
@@ -915,52 +1281,6 @@ async function dispenseVolume() {
 }
 
 // ========================================
-// PRE-FLUSH
-// ========================================
-async function preFlush() {
-    if (!currentDeviceId) return;
-
-    // If pump is running, this button acts as Stop
-    if (isPumpRunning) {
-        await stopPump();
-        return;
-    }
-
-    // Check if device is online
-    if (!deviceOnlineStatus) {
-        Utils.showWarning('Device is offline');
-        return;
-    }
-
-    try {
-        Utils.showLoading('Starting pre-flush...');
-
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('control').set({
-            command: 'PRE_FLUSH',
-            rpm: 200,           // Default pre-flush speed
-            direction: 'CW',    // Default direction
-            onTime: 3000,       // 3 seconds
-            offTime: 0,
-            targetVolume: 0,
-            issuedBy: Auth.getCurrentUserId(),
-            issuedAt: Date.now(),
-            acknowledged: false
-        });
-
-        // Optimistic UI update
-        setPumpRunning(true);
-
-        Utils.hideLoading();
-        Utils.showSuccess('Pre-flush started');
-    } catch (error) {
-        setPumpRunning(false);
-        Utils.hideLoading();
-        console.error('Error starting pre-flush:', error);
-        Utils.showError('Failed to start pre-flush');
-    }
-}
-
-// ========================================
 // FIREBASE SUBSCRIPTIONS
 // ========================================
 function subscribeToDevice() {
@@ -968,126 +1288,135 @@ function subscribeToDevice() {
 
     const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
 
-    // Status updates
-    statusListener = deviceRef.child('status').on('value', (snapshot) => {
-        deviceStatus = snapshot.val() || {};
-        updateStatusUI();
+    // Live Status updates
+    liveStatusListener = deviceRef.child('liveStatus').on('value', (snapshot) => {
+        liveStatus = snapshot.val() || {};
+        updateLiveStatus();
     });
 
-    // Settings updates
-    settingsListener = deviceRef.child('settings').on('value', (snapshot) => {
-        deviceSettings = snapshot.val() || {};
-        updateSettingsUI();
+    // Tube Config updates (Settings)
+    tubeConfigListener = deviceRef.child('tubeConfig').on('value', (snapshot) => {
+        tubeConfig = snapshot.val() || {};
+        updateTubeSettings();
         checkCalibration();
     });
 
-    // Info updates
-    infoListener = deviceRef.child('info').on('value', (snapshot) => {
-        deviceInfo = snapshot.val() || {};
-        updateInfoUI();
+    // Identity updates (Info)
+    identityListener = deviceRef.child('identity').on('value', (snapshot) => {
+        identity = snapshot.val() || {};
+        updateIdentityInfo();
     });
 
-    // Control node updates (for mode and acknowledged)
-    controlListener = deviceRef.child('control').on('value', (snapshot) => {
-        const controlData = snapshot.val() || {};
-        controlMode = controlData.mode || 'LOCAL';
-        updateControlModeUI();
+    // Maintenance updates
+    maintenanceListener = deviceRef.child('maintenance').on('value', (snapshot) => {
+        maintenance = snapshot.val() || {};
+        updateMaintenanceInfo();
+        updateTubeMaintenanceUI();
+    });
 
-        // Check for acknowledged state to hide loading on buttons
-        if (controlData.acknowledged === true) {
-            hideButtonLoading();
-        }
+    // Connection updates
+
+    // 1. Monitor Active Controller (The Lock System)
+    monitorActiveController(deviceRef);
+
+    // Force initial state to offline to clear "Connecting..."
+    updateConnectionStatus(false);
+
+    connectionListener = deviceRef.child('connection').on('value', (snapshot) => {
+        const val = snapshot.val();
+        console.log('📡 RAW Firebase Connection:', val); // Debug Log
+        connection = val || {};
+        updateConnectionStatus(connection.online === true);
+        updateConnectionInfo(); // Update IP/LastSeen in Info page
+    }, (error) => {
+        console.error('🔥 Firebase Error:', error);
+        updateConnectionStatus(false);
     });
 
     console.log('Subscribed to device:', currentDeviceId);
 }
 
-function setupConnectionMonitoring() {
-    connectionListener = FirebaseApp.database.ref('.info/connected')
-        .on('value', (snapshot) => {
-            updateConnectionStatus(snapshot.val() === true);
-        });
-}
+// setupConnectionMonitoring removed - merged into subscribeToDevice connection listener
 
 // ========================================
 // UI UPDATES
 // ========================================
-function updateStatusUI() {
-    if (!deviceStatus) return;
 
-    // Update device online state
-    deviceOnlineStatus = deviceStatus.online === true;
+/**
+ * Update Sidebar Connection Status
+ * @param {boolean} isOnline 
+ */
+function updateConnectionStatus(isOnline) {
+    const statusText = document.getElementById('sidebarConnectionStatus');
+    console.log('🔄 updateConnectionStatus:', isOnline, 'El:', statusText);
 
-    // Update pump running state from device - only trust if device is online
-    // and data is fresh (within 60 seconds)
-    const lastUpdated = deviceStatus.lastUpdated || 0;
-    const isDataFresh = (Date.now() - lastUpdated) < 60000; // 60 seconds
+    if (statusText) {
+        // Remove all status classes first
+        statusText.classList.remove('connecting', 'connected', 'disconnected');
 
-    if (deviceOnlineStatus && isDataFresh) {
-        const running = deviceStatus.pumpRunning === true;
-        setPumpRunning(running);
-    } else if (!deviceOnlineStatus) {
-        // Device is offline - assume pump is stopped
-        setPumpRunning(false);
+        if (isOnline) {
+            statusText.textContent = 'Online';
+            statusText.classList.add('connected');
+            if (el.controlMode) el.controlMode.textContent = 'REMOTE'; // Fix for user request
+        } else {
+            statusText.textContent = 'Offline';
+            statusText.classList.add('disconnected');
+            if (el.controlMode) el.controlMode.textContent = 'LOCAL';
+        }
     }
-    // If data is stale but device claims online, keep current UI state
-
-    // Current RPM display
-    if (el.currentRPM) {
-        el.currentRPM.textContent = deviceStatus.currentRPM || 0;
-    }
-
-    // Control mode - now from control node, not status
-    // (updateControlModeUI handles this)
-
-    // Session dispensed (show 0 if device resets it)
-    const sessionMl = deviceStatus.sessionDispensed || 0;
-    if (el.sessionDispensed) {
-        el.sessionDispensed.textContent = `${sessionMl.toFixed(1)} mL`;
-    }
-    // Also update in System Info page
-    if (el.infoSessionVolume) {
-        el.infoSessionVolume.textContent = `${sessionMl.toFixed(2)} mL`;
-    }
-
-    // Total flow - use totalLiters from board (value is already in mL)
-    const totalMl = deviceStatus.totalLiters || 0;
-    if (el.totalFlowValue) {
-        el.totalFlowValue.textContent = totalMl.toFixed(2);
-    }
-    // Also update in System Info page
-    if (el.infoTotalDispensed) {
-        el.infoTotalDispensed.textContent = `${totalMl.toFixed(2)} mL`;
-    }
-
-    // Last updated
-    if (el.lastUpdated) {
-        el.lastUpdated.textContent = 'Last updated: ' + Utils.formatRelativeTime(deviceStatus.lastUpdated);
-    }
-
-    // Update connection status and controls
-    updateConnectionStatus(FirebaseApp.isConnected());
     updateControlsState();
 }
 
-function updateSettingsUI() {
-    if (!deviceSettings) return;
+function updateLiveStatus() {
+    if (!liveStatus) return;
 
-    // Tube Size - use tubeName only (board doesn't send tubeID)
-    if (el.settingsTube) {
-        const tubeName = deviceSettings.tubeName;
-        if (tubeName && tubeName.trim() !== '') {
-            el.settingsTube.textContent = tubeName;
-            el.settingsTube.classList.remove('warning');
-        } else {
-            el.settingsTube.textContent = 'Not set';
-            el.settingsTube.classList.add('warning');
-        }
+    // Check for acknowledged state to hide loading on buttons
+    if (liveStatus.acknowledged === true) {
+        hideButtonLoading();
     }
 
-    // Calibration Value - never show -1 or negative values
+    // Determine pump running state from activeMode
+    const running = liveStatus.activeMode && liveStatus.activeMode !== 'NONE';
+
+    // Check connection validity (using separate connection state)
+    if (connection && !connection.online) {
+        setPumpRunning(false);
+    } else {
+        setPumpRunning(running);
+    }
+
+    // Update direction
+    if (liveStatus.direction && liveStatus.direction !== currentDirection) {
+        currentDirection = liveStatus.direction;
+        updateDirectionDisplay();
+    }
+
+    // Current RPM display is purely visual (large number)
+    // We do NOT update the input field here to avoid fighting the user
+    // (Removed el.currentRPM update as element was removed)
+
+    // Session dispensed (calculated via flow tracking in dashboard.js)
+
+
+    // Last updated
+    if (el.lastUpdated) {
+        el.lastUpdated.textContent = 'Last updated: ' + (liveStatus.lastUpdated ? Utils.formatRelativeTime(liveStatus.lastUpdated) : 'Never');
+    }
+
+    updateControlsState();
+}
+
+function updateTubeSettings() {
+    if (!tubeConfig) return;
+
+    // Tube Name
+    if (el.settingsTubeName) {
+        el.settingsTubeName.textContent = tubeConfig.tubeName || 'Not Selected';
+    }
+
+    // Ml Per Rev
+    const mlPerRev = tubeConfig.mlPerRev;
     if (el.settingsMlPerRev) {
-        const mlPerRev = deviceSettings.mlPerRev;
         if (mlPerRev && mlPerRev > 0) {
             el.settingsMlPerRev.textContent = `${mlPerRev.toFixed(3)} mL/rev`;
             el.settingsMlPerRev.classList.remove('warning');
@@ -1099,7 +1428,7 @@ function updateSettingsUI() {
 
     // Calibration Type
     if (el.settingsCalibrationType) {
-        const type = deviceSettings.calibrationType;
+        const type = tubeConfig.calibrationType;
         if (type && type !== 'none') {
             el.settingsCalibrationType.textContent = type.charAt(0).toUpperCase() + type.slice(1);
         } else {
@@ -1109,9 +1438,10 @@ function updateSettingsUI() {
 
     // Last Calibrated
     if (el.settingsLastCalibrated) {
-        const lastCal = deviceSettings.lastCalibrated;
-        if (lastCal && lastCal > 0) {
-            el.settingsLastCalibrated.textContent = Utils.formatDateTime(lastCal);
+        const lastCal = tubeConfig.lastCalibrated;
+        if (lastCal) {
+            const date = new Date(lastCal);
+            el.settingsLastCalibrated.textContent = !isNaN(date) ? Utils.formatDateTime(date) : 'Never';
         } else {
             el.settingsLastCalibrated.textContent = 'Never';
         }
@@ -1119,65 +1449,34 @@ function updateSettingsUI() {
 
     // Anti-Drip
     if (el.settingsAntiDrip) {
-        el.settingsAntiDrip.textContent = deviceSettings.antiDrip ? 'Enabled' : 'Disabled';
+        el.settingsAntiDrip.textContent = tubeConfig.antiDrip ? 'Enabled' : 'Disabled';
     }
 
-    // Update flow display when settings change
-    updateFlowDisplay();
-    updateMaxVolume();
-    updateControlsState();
-}
-
-function updateInfoUI() {
-    if (!deviceInfo) return;
-
-    if (el.infoDeviceName) el.infoDeviceName.textContent = deviceInfo.deviceName || 'Frog Pump';
-    if (el.infoDeviceId) el.infoDeviceId.textContent = currentDeviceId;
-    if (el.infoFirmware) el.infoFirmware.textContent = deviceInfo.firmware || 'Unknown';
-    if (el.infoIP) el.infoIP.textContent = deviceInfo.ip || 'N/A';
-    if (el.infoMAC) el.infoMAC.textContent = deviceInfo.mac || 'N/A';
-    if (el.infoLastSeen) el.infoLastSeen.textContent = Utils.formatRelativeTime(deviceInfo.lastSeen);
-    if (el.infoRuntime) {
-        const hours = deviceInfo.totalWorkingHours || 0;
-        el.infoRuntime.textContent = `${hours.toFixed(1)} hours`;
-    }
+    // Crucial: Re-check calibration status whenever tube config changes
+    checkCalibration();
 }
 
 function checkCalibration() {
-    // Board doesn't send tubeID - use mlPerRev > 0 and tubeName not empty
-    const mlPerRev = deviceSettings?.mlPerRev || 0;
-    const tubeName = deviceSettings?.tubeName || '';
+    console.log('Checking Calibration. TubeConfig:', tubeConfig);
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
+    const tubeName = tubeConfig?.tubeName || '';
 
-    isCalibrated = (mlPerRev > 0 && tubeName.trim() !== '');
+    // Consider calibrated if mlPerRev > 0. tubeName is less critical but good practice.
+    isCalibrated = (mlPerRev > 0);
 
-    // Status page warning
     if (el.calibWarning) {
-        if (isCalibrated) {
-            el.calibWarning.classList.add('hidden');
-        } else {
-            el.calibWarning.classList.remove('hidden');
-        }
+        el.calibWarning.classList.toggle('hidden', isCalibrated);
     }
 
-    // Dispense page - only show volume mode warning, RPM mode always works
     if (el.dispenseWarning) {
-        if (isCalibrated) {
-            el.dispenseWarning.classList.add('hidden');
-        } else {
-            el.dispenseWarning.classList.remove('hidden');
-        }
+        el.dispenseWarning.classList.toggle('hidden', isCalibrated);
     }
 
-    // Volume mode tab - disable if not calibrated
     if (el.volumeModeTab) {
-        if (isCalibrated) {
-            el.volumeModeTab.classList.remove('disabled');
-        } else {
-            el.volumeModeTab.classList.add('disabled');
-            // Switch to RPM mode if volume mode is selected
-            if (dispenseMode === 'volume') {
-                switchDispenseMode('rpm');
-            }
+        el.volumeModeTab.classList.toggle('disabled', !isCalibrated);
+        // If we lost calibration while in volume mode, switch back
+        if (!isCalibrated && dispenseMode === 'volume') {
+            switchDispenseMode('rpm');
         }
     }
 
@@ -1185,13 +1484,68 @@ function checkCalibration() {
     updateFlowDisplay();
 }
 
-/**
- * Update control mode display (from control node)
- */
-function updateControlModeUI() {
-    if (el.controlMode) {
-        el.controlMode.textContent = controlMode;
+
+
+function updateIdentityInfo() {
+    if (!identity) return;
+
+    if (el.infoMAC) el.infoMAC.textContent = identity.mac || 'N/A';
+    if (el.infoFirmware) el.infoFirmware.textContent = identity.firmware || 'Unknown';
+    if (el.infoDeviceName) el.infoDeviceName.textContent = 'Frog Pump';
+    if (el.infoDeviceId) el.infoDeviceId.textContent = currentDeviceId;
+}
+
+function updateConnectionInfo() {
+    if (!connection) return;
+
+    if (el.infoIP) el.infoIP.textContent = connection.ip || 'N/A';
+    if (el.infoLastSeen && connection.lastSeen) {
+        const date = new Date(connection.lastSeen);
+        el.infoLastSeen.textContent = !isNaN(date) ? Utils.formatRelativeTime(date) : connection.lastSeen;
     }
+}
+
+function updateMaintenanceInfo() {
+    if (!maintenance) return;
+
+    // Runtime from maintenance node (total)
+    if (el.infoRuntime) {
+        let totalSeconds = maintenance.totalRuntimeSeconds || 0;
+
+        // Add volatile elapsed time if running
+        if (isPumpRunning && pumpRuntimeStart) {
+            const elapsed = Math.floor((Date.now() - pumpRuntimeStart) / 1000);
+            totalSeconds += elapsed;
+        }
+
+        const hours = totalSeconds / 3600;
+        el.infoRuntime.textContent = `${hours.toFixed(1)} hours`;
+    }
+}
+
+function checkCalibration() {
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
+    const tubeName = tubeConfig?.tubeName || '';
+
+    isCalibrated = (mlPerRev > 0 && tubeName.trim() !== '');
+
+    if (el.calibWarning) {
+        el.calibWarning.classList.toggle('hidden', isCalibrated);
+    }
+
+    if (el.dispenseWarning) {
+        el.dispenseWarning.classList.toggle('hidden', isCalibrated);
+    }
+
+    if (el.volumeModeTab) {
+        el.volumeModeTab.classList.toggle('disabled', !isCalibrated);
+        if (!isCalibrated && dispenseMode === 'volume') {
+            switchDispenseMode('rpm');
+        }
+    }
+
+    updateEstimatedTime();
+    updateFlowDisplay();
 }
 
 /**
@@ -1238,8 +1592,29 @@ function updateConnectionStatus(connected) {
             statusClass = 'connected';
             statusText = 'Device Online';
         } else {
-            statusClass = 'disconnected';
-            statusText = 'Device Offline';
+            // Case 3: Locked by another
+            imActiveController = false;
+            console.warn(`⛔ Locked by ${controller.email}. Inactive for: ${Math.round(timeDiff / 1000)}s`);
+            handleControllerLock(true, controller.email, controller.startTime);
+        }
+    });
+}
+
+function handleControllerLock(isLocked, lockedByEmail = '', startTime = null) {
+    // 1. Show/Hide Modal
+    if (el.userLockModal) {
+        if (isLocked) {
+            if (el.lockUserEmail) {
+                let msg = lockedByEmail;
+                if (startTime) {
+                    const date = new Date(startTime);
+                    msg += `\n(Since ${date.toLocaleTimeString()})`;
+                }
+                el.lockUserEmail.textContent = msg;
+            }
+            el.userLockModal.classList.add('active');
+        } else {
+            el.userLockModal.classList.remove('active');
         }
     } else {
         // Firebase not connected
@@ -1247,13 +1622,20 @@ function updateConnectionStatus(connected) {
         statusText = 'No Connection';
     }
 
-    if (el.sidebarConnectionStatus) {
-        el.sidebarConnectionStatus.className = 'sidebar-connection ' + statusClass;
-        el.sidebarConnectionStatus.textContent = statusText;
+    // 2. Toggle Leave Button visibility
+    if (el.leaveDeviceBtn) {
+        el.leaveDeviceBtn.style.display = isLocked ? 'none' : 'flex';
     }
 
-    if (el.mobileConnectionStatus) {
-        el.mobileConnectionStatus.className = 'mobile-connection ' + statusClass;
+    // 3. Disable/Enable Controls (Security)
+    const mainContent = document.querySelector('.page-content');
+    if (mainContent) {
+        // We use pointer-events to disable interaction, 
+        // but adding a visual filter (grayscale) helps user understand
+        mainContent.style.pointerEvents = isLocked ? 'none' : 'auto';
+        mainContent.style.opacity = isLocked ? '0.3' : '1';
+        mainContent.style.filter = isLocked ? 'grayscale(100%) blur(2px)' : 'none';
+        mainContent.style.transition = 'all 0.5s ease';
     }
 }
 
@@ -1264,12 +1646,16 @@ function cleanup() {
     if (!currentDeviceId) return;
     const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
 
-    if (statusListener) deviceRef.child('status').off('value', statusListener);
-    if (settingsListener) deviceRef.child('settings').off('value', settingsListener);
-    if (infoListener) deviceRef.child('info').off('value', infoListener);
-    if (controlListener) deviceRef.child('control').off('value', controlListener);
-    if (connectionListener) {
-        FirebaseApp.database.ref('.info/connected').off('value', connectionListener);
+    // Release lock if we own it
+    if (currentAuthUser) {
+        // Check if we are the current controller before removing (optimistic check)
+        // Actually onDisconnect handles the crash case, but for clean navigation:
+        deviceRef.child('activeController').once('value', snapshot => {
+            const val = snapshot.val();
+            if (val && val.uid === currentAuthUser.uid) {
+                deviceRef.child('activeController').remove();
+            }
+        });
     }
 
     // Stop heartbeat (session cleanup is handled in session.js)
@@ -1289,10 +1675,10 @@ window.Dashboard = {
     stopPump,
     togglePump,
     get deviceId() { return currentDeviceId; },
-    get status() { return deviceStatus; },
+    get status() { return liveStatus; }, // Updated mapping
     get isRunning() { return isPumpRunning; },
     get isCalibrated() { return isCalibrated; },
     cleanup
 };
 
-console.log('Dashboard module loaded');
+console.log('Dashboard module loaded - CLEANUP DONE');

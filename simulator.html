@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frog Pump Simulator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+
+        .card {
+            background: #2d2d2d;
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            width: 350px;
+        }
+
+        h1 {
+            color: #00ff88;
+            margin-top: 0;
+            font-size: 1.5rem;
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 1rem;
+            color: #888;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+            margin-top: 20px;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+
+        .label {
+            color: #888;
+        }
+
+        .value {
+            font-weight: bold;
+            font-family: monospace;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            color: #bbb;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 8px;
+            background: #444;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #fff;
+            box-sizing: border-box;
+        }
+
+        input[type="checkbox"] {
+            transform: scale(1.5);
+            margin-right: 10px;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-toggle {
+            background: #00ff88;
+            color: #000;
+        }
+
+        .btn-toggle:hover {
+            background: #00cc6a;
+        }
+
+        .btn-offline {
+            background: #ff4444;
+            color: white;
+        }
+
+        .btn-offline:hover {
+            background: #cc0000;
+        }
+
+        .hint {
+            font-size: 0.8rem;
+            color: #666;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background: #333;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 300px;
+            border-left: 4px solid #007bff;
+            animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            font-size: 0.95rem;
+        }
+
+        .toast.success {
+            border-left-color: #00ff88;
+        }
+
+        .toast.error {
+            border-left-color: #ff4444;
+        }
+
+        .toast.warning {
+            border-left-color: #ffaa00;
+        }
+
+        .toast-icon {
+            font-size: 1.2rem;
+        }
+
+        .toast-content {
+            flex: 1;
+        }
+
+        .toast-close {
+            background: none;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-size: 1.5rem;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .toast-close:hover {
+            color: #fff;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <!-- Status Panel -->
+        <div class="card">
+            <h1>🐸 Simulator Status</h1>
+
+            <div class="status-row">
+                <span class="label">Device ID:</span>
+                <span class="value" id="deviceId">Loading...</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Connection:</span>
+                <span class="value" id="status">Initializing...</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Heartbeat:</span>
+                <span class="value" id="lastHeartbeat">--:--:--</span>
+            </div>
+
+            <h2>Live Pump State</h2>
+            <div class="status-row">
+                <span class="label">Active Mode:</span>
+                <span class="value" id="activeMode">--</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Target RPM:</span>
+                <span class="value" id="rpm">--</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Ack Status:</span>
+                <span class="value" id="ackStatus" style="font-size: 0.8rem;">--</span>
+            </div>
+
+            <button id="toggleConnBtn" class="btn-toggle">🔌 Disconnect</button>
+        </div>
+
+        <!-- Controls Panel -->
+        <div class="card">
+            <h1>🛠️ Device Controls</h1>
+            <p class="hint" style="margin-top: 0; margin-bottom: 20px;">Simulate physical menu actions</p>
+
+            <div class="control-group">
+                <label>Tube Size (Tube Name)</label>
+                <select id="simTubeName">
+                    <option value="None">None (Not Selected)</option>
+                    <option value="2mm">2mm Silicone</option>
+                    <option value="3mm">3mm Silicone</option>
+                    <option value="custom">Custom Tube</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Calibration Value (mL/Rev)</label>
+                <input type="number" id="simMlPerRev" step="0.01" value="1.50">
+            </div>
+
+            <div class="control-group" style="display: flex; align-items: center;">
+                <input type="checkbox" id="simAntiDrip">
+                <label style="margin: 0;">Enable Anti-Drip</label>
+            </div>
+
+            <button id="updateConfigBtn" class="btn-primary">💾 Update Configuration</button>
+            <p class="hint">Clicking this will update `tubeConfig` in DB. Watch the Web App react!</p>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <!-- App Scripts -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/simulator.js"></script>
+</body>
+
+</html>

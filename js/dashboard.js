@@ -1595,8 +1595,8 @@ function monitorActiveController(deviceRef) {
     activeControllerListener = controllerRef.on('value', (snapshot) => {
         const controller = snapshot.val();
 
-        // 1. Check for BROKEN lock
-        const isBroken = controller && (!controller.uid || !controller.email);
+        // 1. Check for BROKEN lock (missing critical fields including lastActive)
+        const isBroken = controller && (!controller.uid || !controller.email || !controller.lastActive);
 
         // 2. Check for STALE lock (inactive for > 15 seconds)
         const now = Date.now();

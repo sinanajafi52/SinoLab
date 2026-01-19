@@ -1581,156 +1581,20 @@ function hideButtonLoading() {
 // ========================================
 // CONTROLLER LOCK SYSTEM
 // ========================================
+
+// ========================================
+// CONTROLLER LOCK SYSTEM (DEPRECATED)
+// ========================================
+// NOTE: Lock system is now handled by Session module (js/session.js)
+// Checking 'session' node instead of 'activeController'.
+
 function monitorActiveController(deviceRef) {
-    if (!currentAuthUser) return;
-
-    const controllerRef = deviceRef.child('activeController');
-    const myUid = currentAuthUser.uid;
-    const myEmail = currentAuthUser.email || 'Unknown User';
-    let imActiveController = false; // Track if this client is the active controller
-
-    // Heartbeat Loop (Keep lock fresh)
-    if (activeControllerInterval) clearInterval(activeControllerInterval);
-    activeControllerInterval = setInterval(() => {
-        if (imActiveController) {
-            controllerRef.update({
-                lastActive: Date.now(), // Use client time to match reader check
-                email: myEmail,
-                uid: myUid
-            }).catch(err => console.error("Heartbeat failed", err));
-        }
-    }, 5000); // Every 5 seconds
-
-    activeControllerListener = controllerRef.on('value', (snapshot) => {
-        const controller = snapshot.val();
-
-        // 1. Check for BROKEN lock (missing critical fields including lastActive)
-        const isBroken = controller && (!controller.uid || !controller.email || !controller.lastActive);
-
-        // 2. Check for STALE lock (inactive for > 15 seconds)
-        const now = Date.now();
-        let isStale = false;
-        let timeDiff = 0;
-
-        if (controller && controller.lastActive) {
-            timeDiff = now - controller.lastActive;
-            isStale = timeDiff > 3000; // 3 seconds (was 15000)
-        }
-
-        if (!controller || isBroken || isStale) {
-            // Case 1: Free, Broken, or Stale -> Claim it ATOMICALLY!
-            const reason = isBroken ? 'Broken' : (isStale ? `Stale (${Math.round(timeDiff / 1000)}s inactive)` : 'Free');
-            console.log(`🔓 Attempting to claim lock: ${reason}`);
-
-            // Use TRANSACTION for atomic claim (prevents race condition)
-            controllerRef.transaction((currentValue) => {
-                // Double-check lock is still available
-                if (!currentValue) {
-                    return {
-                        uid: myUid,
-                        email: myEmail,
-                        startTime: Date.now(),
-                        lastActive: Date.now()
-                    };
-                }
-
-                // Check if still stale/broken
-                const nowTxn = Date.now();
-                const isTxnBroken = !currentValue.uid || !currentValue.email || !currentValue.lastActive;
-                const isTxnStale = currentValue.lastActive && (nowTxn - currentValue.lastActive > 3000);
-
-                if (isTxnBroken || isTxnStale) {
-                    return {
-                        uid: myUid,
-                        email: myEmail,
-                        startTime: nowTxn,
-                        lastActive: nowTxn
-                    };
-                }
-
-                // Check if it's mine
-                if (currentValue.uid === myUid || currentValue.email === myEmail) {
-                    return {
-                        ...currentValue,
-                        uid: myUid,
-                        lastActive: nowTxn
-                    };
-                }
-
-                // Locked by someone else - abort
-                return undefined;
-            }, (error, committed, snapshot) => {
-                if (error) {
-                    console.error('❌ Transaction error:', error);
-                } else if (committed) {
-                    console.log('✅ Lock claimed successfully!');
-                    imActiveController = true;
-                    controllerRef.onDisconnect().remove();
-                    handleControllerLock(false);
-                } else {
-                    console.warn('⛔ Transaction aborted - locked by another user');
-                }
-            });
-
-        } else if (controller.uid === myUid || controller.email === myEmail) {
-            // Case 2: It's ME!
-            imActiveController = true;
-            console.log('✅ Active controller.');
-
-            // Sync UID/Email if needed
-            if (controller.uid !== myUid) {
-                controllerRef.update({ uid: myUid, lastActive: Date.now() });
-            }
-
-            controllerRef.onDisconnect().remove();
-            handleControllerLock(false);
-
-        } else {
-            // Case 3: Locked by another
-            imActiveController = false;
-            console.warn(`⛔ Locked by ${controller.email}. Inactive for: ${Math.round(timeDiff / 1000)}s`);
-            handleControllerLock(true, controller.email, controller.startTime);
-        }
-    });
+    // Legacy function disabled. 
+    console.log("Legacy monitorActiveController disabled. Using Session module.");
 }
 
 function handleControllerLock(isLocked, lockedByEmail = '', startTime = null) {
-    // 1. Show/Hide Modal
-    if (el.userLockModal) {
-        if (isLocked) {
-            if (el.lockUserEmail) {
-                let msg = lockedByEmail;
-                if (startTime) {
-                    const date = new Date(startTime);
-                    msg += `\n(Since ${date.toLocaleTimeString()})`;
-                }
-                el.lockUserEmail.textContent = msg;
-            }
-            el.userLockModal.classList.add('active');
-        } else {
-            el.userLockModal.classList.remove('active');
-        }
-    } else {
-        // Firebase not connected
-        statusClass = 'disconnected';
-        statusText = 'No Connection';
-    }
-
-    // 2. Toggle Leave Button visibility
-    if (el.leaveDeviceBtn) {
-        el.leaveDeviceBtn.style.display = isLocked ? 'none' : 'flex';
-    }
-
-    // 3. Disable/Enable Controls (Security)
-    const mainContent = document.querySelector('.page-content');
-    if (mainContent) {
-        // We use pointer-events to disable interaction, 
-        // but adding a visual filter (grayscale) helps user understand
-        mainContent.style.pointerEvents = isLocked ? 'none' : 'auto';
-        mainContent.style.opacity = isLocked ? '0.3' : '1';
-        mainContent.style.filter = isLocked ? 'grayscale(100%) blur(2px)' : 'none';
-        mainContent.style.transition = 'all 0.5s ease';
-    }
+    // Legacy function disabled.
 }
 
 // ========================================
@@ -1738,19 +1602,6 @@ function handleControllerLock(isLocked, lockedByEmail = '', startTime = null) {
 // ========================================
 function cleanup() {
     if (!currentDeviceId) return;
-    const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
-
-    // Release lock if we own it
-    if (currentAuthUser) {
-        // Check if we are the current controller before removing (optimistic check)
-        // Actually onDisconnect handles the crash case, but for clean navigation:
-        deviceRef.child('activeController').once('value', snapshot => {
-            const val = snapshot.val();
-            if (val && val.uid === currentAuthUser.uid) {
-                deviceRef.child('activeController').remove();
-            }
-        });
-    }
 
     // Stop heartbeat (session cleanup is handled in session.js)
     if (window.Session) {

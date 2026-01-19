@@ -1576,9 +1576,18 @@ function monitorActiveController(deviceRef) {
                 controllerRef.onDisconnect().remove();
             });
             handleControllerLock(false);
-        } else if (controller.uid === myUid) {
+        } else if (controller.uid === myUid || controller.email === myEmail) {
             // Case 2: I am the controller. All good.
-            console.log('✅ I am the active controller.');
+            // We check Email too, so if session UID changed, user can reclaim their lock.
+
+            console.log('✅ I am the active controller (Matched UID or Email).');
+
+            // If UID mismatch but Email match, update the record
+            if (controller.uid !== myUid) {
+                console.log('🔄 Updating lock UID to match current session...');
+                controllerRef.update({ uid: myUid });
+            }
+
             controllerRef.onDisconnect().remove();
             handleControllerLock(false);
         } else {

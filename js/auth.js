@@ -177,26 +177,9 @@ async function signOut() {
     try {
         Utils.showLoading('Signing out...');
 
-        // CRITICAL: Release device lock before signing out
-        const deviceId = Utils.getDeviceId();
-        if (deviceId) {
-            try {
-                const user = FirebaseApp.getCurrentUser();
-                if (user) {
-                    const lockRef = FirebaseApp.getDeviceRef(deviceId).child('activeController');
-                    const snapshot = await lockRef.once('value');
-                    const lock = snapshot.val();
-
-                    // Only remove if we own it
-                    if (lock && lock.uid === user.uid) {
-                        await lockRef.remove();
-                        console.log('🔓 Lock released on logout');
-                    }
-                }
-            } catch (err) {
-                console.error('Failed to release lock on logout:', err);
-                // Continue with logout anyway
-            }
+        // Release all device sessions before signing out
+        if (window.Session) {
+            await Session.releaseAllSessions();
         }
 
         await FirebaseApp.signOut();

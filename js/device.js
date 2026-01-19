@@ -196,57 +196,31 @@ async function disconnectDevice(deviceId) {
 }
 
 /**
- * Select a device (Check lock -> save -> navigate)
+ * Select a device (save to localStorage and navigate)
+ * Checks for active sessions before allowing access
  * @param {string} deviceId - Device ID to select
  */
 async function selectDevice(deviceId) {
-    Utils.showLoading('Checking access...');
+    Utils.showLoading('Checking device access...');
 
-    // Check if locked
-    const isAllowed = await checkDeviceLock(deviceId);
-
-    Utils.hideLoading();
-
-    if (isAllowed) {
-        Utils.saveDeviceId(deviceId);
-        Utils.navigateTo('dashboard.html');
-    }
-}
-
-/**
- * Check if device is locked by another user
- */
-async function checkDeviceLock(deviceId) {
     try {
-        const snapshot = await FirebaseApp.getDeviceRef(deviceId).child('activeController').once('value');
-        const controller = snapshot.val();
-        const myUid = Auth.getCurrentUserId();
+        // Attempt to claim session
+        const result = await Session.claimSession(deviceId);
 
-        if (controller && controller.uid !== myUid) {
-            // Check for broken lock (missing data) OR stale lock (>15s inactive)
-            const isBroken = !controller.uid || !controller.email || !controller.lastActive;
-            const isStale = controller.lastActive && (Date.now() - controller.lastActive > 3000); // 3 seconds
-
-            if (isBroken || isStale) {
-                console.warn('⚠️ Ignoring broken/stale lock in device list check.');
-                return true; // Allow entry - lock will be claimed in dashboard
-            }
-
-            // Valid active lock by another user - Block entry
-            const modal = document.getElementById('userLockModal');
-            const emailEl = document.getElementById('lockUserEmail');
-            if (modal && emailEl) {
-                emailEl.textContent = controller.email || 'Unknown User';
-                modal.classList.add('active');
-            } else {
-                Utils.showError(`Device is used by ${controller.email}`);
-            }
-            return false;
+        if (!result.success) {
+            Utils.hideLoading();
+            Utils.showError(result.message);
+            return;
         }
-        return true;
-    } catch (e) {
-        console.error('Lock check failed', e);
-        return true; // Assume open if check fails (fallback)
+
+        // Session claimed successfully - save and navigate
+        Utils.saveDeviceId(deviceId);
+        Utils.hideLoading();
+        Utils.navigateTo('dashboard.html');
+    } catch (error) {
+        Utils.hideLoading();
+        console.error('Error selecting device:', error);
+        Utils.showError('Failed to access device. Please try again.');
     }
 }
 
@@ -285,13 +259,17 @@ async function getLinkedDevicesWithInfo() {
         const info = await getDeviceInfo(deviceId);
         const conn = await getDeviceConnection(deviceId);
         const linkData = linkedDevices[deviceId];
+        const sessionStatus = await Session.getSessionStatus(deviceId);
 
         devicesWithInfo.push({
             deviceId,
             nickname: linkData?.nickname || '',
             linkedAt: linkData?.linkedAt,
-            info: info || {}, // identity
-            online: conn?.online === true
+            info: info || {},
+            status: status || {},
+            online: status?.online === true,
+            sessionAvailable: sessionStatus.available,
+            sessionMessage: sessionStatus.message
         });
     }
 
@@ -325,8 +303,19 @@ async function renderDeviceList(containerId = 'deviceList') {
             return;
         }
 
-        container.innerHTML = devices.map(device => `
-            <div class="device-card" data-device-id="${device.deviceId}">
+        container.innerHTML = devices.map(device => {
+            // Determine status display
+            let statusClass = device.online ? 'online' : 'offline';
+            let statusText = device.online ? '🟢 Online' : '🔴 Offline';
+
+            // Show session status if device is in use by another user
+            if (!device.sessionAvailable) {
+                statusClass = 'in-use';
+                statusText = '🔒 ' + device.sessionMessage;
+            }
+
+            return `
+            <div class="device-card ${!device.sessionAvailable ? 'locked' : ''}" data-device-id="${device.deviceId}">
                 <div class="device-card-icon">🐸</div>
                 <div class="device-card-info">
                     <div class="device-card-name">
@@ -334,11 +323,12 @@ async function renderDeviceList(containerId = 'deviceList') {
                     </div>
                     <div class="device-card-id">${device.deviceId}</div>
                 </div>
-                <div class="device-card-status ${device.online ? 'online' : 'offline'}">
-                    <span>${device.online ? '🟢 Online' : '🔴 Offline'}</span>
+                <div class="device-card-status ${statusClass}">
+                    <span>${statusText}</span>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
         // Add click handlers
         container.querySelectorAll('.device-card').forEach(card => {

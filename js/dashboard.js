@@ -38,7 +38,9 @@ let connectionListener = null;
 
 // Lock System
 let activeControllerListener = null;
+let activeControllerInterval = null; // Heartbeat
 let currentAuthUser = null;
+let imActiveController = false;
 
 // Control state (Removed controlMode as it's no longer used)
 
@@ -173,6 +175,7 @@ function cacheElements() {
     el.userLockModal = document.getElementById('userLockModal');
     el.lockUserEmail = document.getElementById('lockUserEmail');
     el.exitDashboardBtn = document.getElementById('exitDashboardBtn');
+    el.leaveDeviceBtn = document.getElementById('leaveDeviceBtn');
 }
 
 // ========================================
@@ -386,6 +389,20 @@ function setupEventHandlers() {
     // Exit on Lock
     if (el.exitDashboardBtn) {
         el.exitDashboardBtn.addEventListener('click', () => {
+            Utils.navigateTo('device.html');
+        });
+    }
+
+    // Leave Device (Active Release)
+    if (el.leaveDeviceBtn) {
+        el.leaveDeviceBtn.addEventListener('click', async () => {
+            if (!currentDeviceId) return;
+            Utils.showLoading('Releasing control...');
+            try {
+                // Remove lock explicitly
+                const ref = FirebaseApp.getDeviceRef(currentDeviceId).child('activeController');
+                await ref.remove();
+            } catch (e) { console.error(e); }
             Utils.navigateTo('device.html');
         });
     }
@@ -1561,64 +1578,96 @@ function monitorActiveController(deviceRef) {
     const controllerRef = deviceRef.child('activeController');
     const myUid = currentAuthUser.uid;
     const myEmail = currentAuthUser.email || 'Unknown User';
+    let imActiveController = false; // Track if this client is the active controller
+
+    // Heartbeat Loop (Keep lock fresh)
+    if (activeControllerInterval) clearInterval(activeControllerInterval);
+    activeControllerInterval = setInterval(() => {
+        if (imActiveController) {
+            controllerRef.update({
+                lastActive: firebase.database.ServerValue.TIMESTAMP
+            }).catch(err => console.error("Heartbeat failed", err));
+        }
+    }, 5000); // Every 5 seconds
 
     activeControllerListener = controllerRef.on('value', (snapshot) => {
         const controller = snapshot.val();
 
-        // Check for broken lock (exists but missing critical info)
-        const isBrokenLock = controller && (!controller.uid || !controller.email);
+        // 1. Check for BROKEN lock (missing fields)
+        const isBroken = controller && (!controller.uid || !controller.email);
 
-        if (!controller || isBrokenLock) {
-            // Case 1: No one is controlling OR Lock is broken. Claim it!
-            console.log(isBrokenLock ? '⚠️ Broken lock detected. Reclaiming...' : '🔓 Device free. Claiming control...');
+        // 2. Check for STALE lock (inactive for > 15 seconds)
+        const now = Date.now();
+        const isStale = controller && controller.lastActive && (now - controller.lastActive > 15000);
+
+        if (!controller || isBroken || isStale) {
+            // Case 1: Free, Broken, or Stale -> Claim it!
+            const reason = isBroken ? 'Broken Lock' : (isStale ? 'Stale Lock' : 'Free');
+            console.log(`🔓 claiming control (${reason})...`);
 
             controllerRef.set({
                 uid: myUid,
                 email: myEmail,
-                startTime: Date.now()
+                startTime: Date.now(),
+                lastActive: firebase.database.ServerValue.TIMESTAMP
             }).then(() => {
                 controllerRef.onDisconnect().remove();
             });
             handleControllerLock(false);
+            imActiveController = true;
+
         } else if (controller.uid === myUid || controller.email === myEmail) {
-            // Case 2: I am the controller. All good.
-            // We check Email too, so if session UID changed, user can reclaim their lock.
+            // Case 2: It's ME!
+            imActiveController = true;
+            console.log('✅ Active controller.');
 
-            console.log('✅ I am the active controller (Matched UID or Email).');
-
-            // If UID mismatch but Email match, update the record
-            if (controller.uid !== myUid) {
-                console.log('🔄 Updating lock UID to match current session...');
-                controllerRef.update({ uid: myUid });
-            }
+            // Sync UID if needed
+            if (controller.uid !== myUid) controllerRef.update({ uid: myUid });
 
             controllerRef.onDisconnect().remove();
             handleControllerLock(false);
+
         } else {
-            // Case 3: Someone else is controlling. LOCK UI.
-            console.warn(`⛔ Device locked by ${controller.email} (UID: ${controller.uid}) vs My UID: ${myUid}`);
+            // Case 3: Locked by another active user
+            imActiveController = false;
+            console.warn(`⛔ Start: ${controller.startTime}, LastActive: ${controller.lastActive}`);
             handleControllerLock(true, controller.email, controller.startTime);
         }
     });
 }
 
 function handleControllerLock(isLocked, lockedByEmail = '', startTime = null) {
-    if (!el.userLockModal) return;
-
-    if (isLocked) {
-        // Show blocking modal
-        if (el.lockUserEmail) {
-            let msg = lockedByEmail;
-            if (startTime) {
-                const date = new Date(startTime);
-                msg += `\n(Since ${date.toLocaleTimeString()})`;
+    // 1. Show/Hide Modal
+    if (el.userLockModal) {
+        if (isLocked) {
+            if (el.lockUserEmail) {
+                let msg = lockedByEmail;
+                if (startTime) {
+                    const date = new Date(startTime);
+                    msg += `\n(Since ${date.toLocaleTimeString()})`;
+                }
+                el.lockUserEmail.textContent = msg;
             }
-            el.lockUserEmail.textContent = msg;
+            el.userLockModal.classList.add('active');
+        } else {
+            el.userLockModal.classList.remove('active');
         }
-        el.userLockModal.classList.add('active');
-    } else {
-        // Hide modal
-        el.userLockModal.classList.remove('active');
+    }
+
+    // 2. Toggle Leave Button visibility
+    if (el.leaveDeviceBtn) {
+        el.leaveDeviceBtn.style.display = isLocked ? 'none' : 'flex';
+    }
+
+    // 3. Disable/Enable Controls (Security)
+    const mainContent = document.querySelector('.page-content');
+    if (mainContent) {
+        // We use pointer-events to disable interaction, 
+        // but adding a visual filter (grayscale) helps user understand
+        mainContent.style.pointerEvents = isLocked ? 'none' : 'auto';
+        mainContent.style.opacity = isLocked ? '0.3' : '1';
+        mainContent.style.filter = isLocked ? 'grayscale(100%) blur(2px)' : 'none';
+        mainContent.style.transition = 'all 0.5s ease';
     }
 }
 
@@ -1642,6 +1691,8 @@ function cleanup() {
     }
 
     if (activeControllerListener) deviceRef.child('activeController').off('value', activeControllerListener);
+    if (activeControllerInterval) clearInterval(activeControllerInterval);
+
     if (liveStatusListener) deviceRef.child('liveStatus').off('value', liveStatusListener);
     if (tubeConfigListener) deviceRef.child('tubeConfig').off('value', tubeConfigListener);
     if (identityListener) deviceRef.child('identity').off('value', identityListener);

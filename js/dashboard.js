@@ -1565,9 +1565,13 @@ function monitorActiveController(deviceRef) {
     activeControllerListener = controllerRef.on('value', (snapshot) => {
         const controller = snapshot.val();
 
-        if (!controller) {
-            // Case 1: No one is controlling. Claim it!
-            console.log('🔓 Device free. Claiming control...');
+        // Check for broken lock (exists but missing critical info)
+        const isBrokenLock = controller && (!controller.uid || !controller.email);
+
+        if (!controller || isBrokenLock) {
+            // Case 1: No one is controlling OR Lock is broken. Claim it!
+            console.log(isBrokenLock ? '⚠️ Broken lock detected. Reclaiming...' : '🔓 Device free. Claiming control...');
+
             controllerRef.set({
                 uid: myUid,
                 email: myEmail,

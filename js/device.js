@@ -223,6 +223,12 @@ async function checkDeviceLock(deviceId) {
         const myUid = Auth.getCurrentUserId();
 
         if (controller && controller.uid !== myUid) {
+            // Check for broken lock - Allow entry if data is missing
+            if (!controller.uid || !controller.email) {
+                console.warn('⚠️ Ignoring broken lock in device list check.');
+                return true;
+            }
+
             // Locked!
             const modal = document.getElementById('userLockModal');
             const emailEl = document.getElementById('lockUserEmail');

@@ -177,6 +177,11 @@ async function signOut() {
     try {
         Utils.showLoading('Signing out...');
 
+        // Release all device sessions before signing out
+        if (window.Session) {
+            await Session.releaseAllSessions();
+        }
+
         await FirebaseApp.signOut();
 
         // Clear stored data

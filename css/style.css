@@ -1267,6 +1267,38 @@ h3 { font-size: 1.25rem; }
     font-family: monospace;
 }
 
+.device-card.locked {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.device-card.locked:hover {
+    border-color: var(--border-color);
+    transform: none;
+}
+
+.device-card-status {
+    margin-left: auto;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 4px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.device-card-status.online {
+    color: #22c55e;
+}
+
+.device-card-status.offline {
+    color: #ef4444;
+}
+
+.device-card-status.in-use {
+    color: #f97316;
+    background: rgba(249, 115, 22, 0.1);
+}
+
 /* ========================================
    UTILITIES
    ======================================== */

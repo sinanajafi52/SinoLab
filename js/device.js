@@ -177,11 +177,31 @@ async function disconnectDevice(deviceId) {
 
 /**
  * Select a device (save to localStorage and navigate)
+ * Checks for active sessions before allowing access
  * @param {string} deviceId - Device ID to select
  */
-function selectDevice(deviceId) {
-    Utils.saveDeviceId(deviceId);
-    Utils.navigateTo('dashboard.html');
+async function selectDevice(deviceId) {
+    Utils.showLoading('Checking device access...');
+
+    try {
+        // Attempt to claim session
+        const result = await Session.claimSession(deviceId);
+
+        if (!result.success) {
+            Utils.hideLoading();
+            Utils.showError(result.message);
+            return;
+        }
+
+        // Session claimed successfully - save and navigate
+        Utils.saveDeviceId(deviceId);
+        Utils.hideLoading();
+        Utils.navigateTo('dashboard.html');
+    } catch (error) {
+        Utils.hideLoading();
+        console.error('Error selecting device:', error);
+        Utils.showError('Failed to access device. Please try again.');
+    }
 }
 
 // ========================================
@@ -219,6 +239,7 @@ async function getLinkedDevicesWithInfo() {
         const info = await getDeviceInfo(deviceId);
         const status = await getDeviceStatus(deviceId);
         const linkData = linkedDevices[deviceId];
+        const sessionStatus = await Session.getSessionStatus(deviceId);
 
         devicesWithInfo.push({
             deviceId,
@@ -226,7 +247,9 @@ async function getLinkedDevicesWithInfo() {
             linkedAt: linkData?.linkedAt,
             info: info || {},
             status: status || {},
-            online: status?.online === true
+            online: status?.online === true,
+            sessionAvailable: sessionStatus.available,
+            sessionMessage: sessionStatus.message
         });
     }
 
@@ -260,8 +283,19 @@ async function renderDeviceList(containerId = 'deviceList') {
             return;
         }
 
-        container.innerHTML = devices.map(device => `
-            <div class="device-card" data-device-id="${device.deviceId}">
+        container.innerHTML = devices.map(device => {
+            // Determine status display
+            let statusClass = device.online ? 'online' : 'offline';
+            let statusText = device.online ? '🟢 Online' : '🔴 Offline';
+
+            // Show session status if device is in use by another user
+            if (!device.sessionAvailable) {
+                statusClass = 'in-use';
+                statusText = '🔒 ' + device.sessionMessage;
+            }
+
+            return `
+            <div class="device-card ${!device.sessionAvailable ? 'locked' : ''}" data-device-id="${device.deviceId}">
                 <div class="device-card-icon">🐸</div>
                 <div class="device-card-info">
                     <div class="device-card-name">
@@ -269,11 +303,12 @@ async function renderDeviceList(containerId = 'deviceList') {
                     </div>
                     <div class="device-card-id">${device.deviceId}</div>
                 </div>
-                <div class="device-card-status ${device.online ? 'online' : 'offline'}">
-                    <span>${device.online ? '🟢 Online' : '🔴 Offline'}</span>
+                <div class="device-card-status ${statusClass}">
+                    <span>${statusText}</span>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
         // Add click handlers
         container.querySelectorAll('.device-card').forEach(card => {

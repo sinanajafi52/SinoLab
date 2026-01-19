@@ -36,7 +36,7 @@ const el = {};
 // ========================================
 // INITIALIZATION
 // ========================================
-function initDashboard() {
+async function initDashboard() {
     console.log('Initializing dashboard...');
 
     currentDeviceId = Utils.getSavedDeviceId();
@@ -46,7 +46,20 @@ function initDashboard() {
     }
 
     Auth.initProtectedPage(async (user) => {
-        console.log('Auth ready, initializing UI...');
+        console.log('Auth ready, checking session...');
+
+        // Verify session is still valid (in case user refreshed page)
+        const sessionResult = await Session.claimSession(currentDeviceId);
+        if (!sessionResult.success) {
+            Utils.showError(sessionResult.message);
+            // Redirect back to device selection
+            setTimeout(() => {
+                Utils.navigateTo('device.html');
+            }, 2000);
+            return;
+        }
+
+        console.log('Session verified, initializing UI...');
 
         cacheElements();
         setupEventHandlers();
@@ -1257,6 +1270,11 @@ function cleanup() {
     if (controlListener) deviceRef.child('control').off('value', controlListener);
     if (connectionListener) {
         FirebaseApp.database.ref('.info/connected').off('value', connectionListener);
+    }
+
+    // Stop heartbeat (session cleanup is handled in session.js)
+    if (window.Session) {
+        Session.stopHeartbeat();
     }
 }
 

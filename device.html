@@ -106,29 +106,22 @@
 
     <!-- JavaScript Modules -->
     <!-- User Lock Modal (Blocking) -->
-    <div id="userLockModal" class="modal-overlay">
-        <div class="modal">
-            <div class="modal-header">
-                <h3 class="modal-title text-red" style="color: #ef4444;">⛔ Access Denied</h3>
-            </div>
-            <div class="modal-body">
-                <div class="lock-icon-container" style="text-align: center; margin-bottom: 20px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none"
-                        stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                    </svg>
+    <div id="userLockModal" class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-icon" style="font-size: 4rem; margin-bottom: 20px; animation: pulse 2s infinite;">⛔</div>
+            <h3 class="modal-title" style="color: #ef4444; font-size: 1.5rem; margin-bottom: 10px;">Access Denied</h3>
+            <div class="modal-message" style="color: #cbd5e1; margin-bottom: 25px; line-height: 1.6;">
+                <p style="margin-bottom: 15px;">This device is currently being controlled by another user.</p>
+                <div id="lockUserEmail" class="highlight-box"
+                    style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 15px; border-radius: 12px; font-family: monospace; font-weight: bold; margin-bottom: 15px;">
+                    --
                 </div>
-                <p>This device is currently being controlled by another user:</p>
-                <p id="lockUserEmail" class="highlight-box"
-                    style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; margin: 15px 0; font-family: monospace; text-align: center; color: #facc15; font-weight: bold;">
-                    --</p>
-                <p class="text-sm text-gray" style="color: #bbb;">Simultaneous control is disabled to prevent data
-                    conflicts. Please wait for
-                    the user to finish.</p>
+                <p style="font-size: 0.875rem; opacity: 0.7;">Simultaneous control is disabled to prevent data
+                    conflicts.</p>
             </div>
-            <div class="modal-actions" style="justify-content: center;">
-                <button id="closeLockModalBtn" class="btn btn-secondary btn-full">
+            <div class="modal-actions">
+                <button id="closeLockModalBtn" class="btn btn-secondary btn-full"
+                    style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white;">
                     ❌ Close
                 </button>
             </div>

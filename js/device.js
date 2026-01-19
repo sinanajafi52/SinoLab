@@ -196,12 +196,49 @@ async function disconnectDevice(deviceId) {
 }
 
 /**
- * Select a device (save to localStorage and navigate)
+ * Select a device (Check lock -> save -> navigate)
  * @param {string} deviceId - Device ID to select
  */
-function selectDevice(deviceId) {
-    Utils.saveDeviceId(deviceId);
-    Utils.navigateTo('dashboard.html');
+async function selectDevice(deviceId) {
+    Utils.showLoading('Checking access...');
+
+    // Check if locked
+    const isAllowed = await checkDeviceLock(deviceId);
+
+    Utils.hideLoading();
+
+    if (isAllowed) {
+        Utils.saveDeviceId(deviceId);
+        Utils.navigateTo('dashboard.html');
+    }
+}
+
+/**
+ * Check if device is locked by another user
+ */
+async function checkDeviceLock(deviceId) {
+    try {
+        const snapshot = await FirebaseApp.getDeviceRef(deviceId).child('activeController').once('value');
+        const controller = snapshot.val();
+        const myUid = Auth.getCurrentUserId();
+
+        if (controller && controller.uid !== myUid) {
+            // Locked!
+            const modal = document.getElementById('userLockModal');
+            const emailEl = document.getElementById('lockUserEmail');
+            if (modal && emailEl) {
+                emailEl.textContent = controller.email || 'Unknown User';
+                modal.classList.add('active');
+            } else {
+                Utils.showError(`Device is used by ${controller.email}`);
+            }
+            return false;
+        }
+        return true;
+    } catch (e) {
+        console.error('Lock check failed', e);
+        return true; // Assume open if check fails (fallback)
+    }
 }
 
 // ========================================
@@ -365,8 +402,8 @@ function setupDeviceForm(formId = 'deviceForm', inputId = 'deviceInput') {
         const success = await connectDevice(deviceId);
 
         if (success) {
-            // Navigate to dashboard
-            Utils.navigateTo('dashboard.html');
+            // Check lock before navigating
+            await selectDevice(deviceId);
         }
     });
 }
@@ -389,7 +426,16 @@ function initDevicePage() {
         setupDeviceForm();
 
         // Setup change device button if on other pages
+        // Setup change device button
         setupChangeDeviceButton();
+
+        // Lock Modal Close Button
+        const closeLockBtn = document.getElementById('closeLockModalBtn');
+        if (closeLockBtn) {
+            closeLockBtn.addEventListener('click', () => {
+                document.getElementById('userLockModal').classList.remove('active');
+            });
+        }
     });
 }
 

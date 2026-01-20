@@ -1188,9 +1188,10 @@ async function dispenseRpmBased() {
         return;
     }
 
-    try {
-        Utils.showLoading('Starting dispense...');
+    // Optimistic UI update
+    setPumpRunning(true);
 
+    try {
         // 1. Set parameters
         await FirebaseApp.getDeviceRef(currentDeviceId).child('rpmDispense').set({
             rpm: rpm,
@@ -1207,14 +1208,9 @@ async function dispenseRpmBased() {
             lastUpdated: new Date().toISOString()
         });
 
-        // Optimistic UI update
-        setPumpRunning(true);
-
-        Utils.hideLoading();
         Utils.showSuccess(`Running at ${rpm} RPM for ${onTime}s`);
     } catch (error) {
         setPumpRunning(false);
-        Utils.hideLoading();
         console.error('Error starting dispense:', error);
         Utils.showError('Failed to start dispense');
     }

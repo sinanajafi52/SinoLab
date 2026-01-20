@@ -326,11 +326,27 @@ function setupEventHandlers() {
         });
         el.flowInput.addEventListener('blur', () => {
             isFlowInputFocused = false;
-            // Validate on blur
-            const val = Math.max(0, parseFloat(el.flowInput.value) || 0);
+            // Validate and snap to nearest RPM
+            let val = Math.max(0, parseFloat(el.flowInput.value) || 0);
+
+            // If calibrated, snap to nearest RPM
+            const mlPerRev = tubeConfig?.mlPerRev || 0;
+            if (mlPerRev > 0 && val > 0) {
+                // Calculate nearest RPM
+                let calculatedRPM = Math.round(val / mlPerRev);
+                // Clamp RPM
+                calculatedRPM = Math.min(400, Math.max(0, calculatedRPM));
+
+                // Update targetRPM
+                setRPM(calculatedRPM);
+
+                // Recalculate exact flow based on snapped RPM
+                val = calculatedRPM * mlPerRev;
+            }
+
             targetFlow = val;
             if (val > 0) {
-                el.flowInput.value = val;
+                el.flowInput.value = val.toFixed(2);
             }
         });
         el.flowInput.addEventListener('input', (e) => {
@@ -673,11 +689,9 @@ function updateTotalFlowDisplay() {
     // Total mL = flow rate (mL/min) * time (min)
     sessionFlowMl = currentFlowRate * elapsedMin;
 
-    // Convert to Liters and display with 3 decimals
-    const sessionLiters = sessionFlowMl / 1000;
-
+    // Display in mL (no conversion to Liters needed)
     if (el.totalFlowValue) {
-        el.totalFlowValue.textContent = sessionLiters.toFixed(2);
+        el.totalFlowValue.textContent = sessionFlowMl.toFixed(2);
     }
 
     // Update runtime display as well
@@ -945,6 +959,9 @@ async function startPump() {
         console.error('Error starting pump:', error);
         // Revert UI on error
         setPumpRunning(false);
+        // Stop tracking if start failed
+        stopFlowTracking();
+        stopRuntimeTracking();
         Utils.showError('Failed to start pump. Check connection.');
     }
 }
@@ -1405,7 +1422,8 @@ function updateLiveStatus() {
 
     // Last updated
     if (el.lastUpdated) {
-        el.lastUpdated.textContent = 'Last updated: ' + (liveStatus.lastUpdated ? Utils.formatRelativeTime(liveStatus.lastUpdated) : 'Never');
+        const timeStr = liveStatus.lastUpdated || liveStatus.updatedAt;
+        el.lastUpdated.textContent = 'Last updated: ' + (timeStr ? Utils.formatRelativeTime(timeStr) : 'Never');
     }
 
     updateControlsState();

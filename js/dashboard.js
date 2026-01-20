@@ -987,6 +987,7 @@ async function stopPump() {
     try {
         await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
             activeMode: 'NONE',
+            inputMode: null, // Clear inputMode to avoid conflict
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()

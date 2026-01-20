@@ -647,6 +647,18 @@ function startFlowTracking() {
     pumpStartTime = Date.now();
     sessionFlowMl = 0;
 
+    // Use server time if available to resume session
+    if (liveStatus && (liveStatus.lastUpdated || liveStatus.updatedAt)) {
+        const serverTime = new Date(liveStatus.lastUpdated || liveStatus.updatedAt).getTime();
+        // Only use server time if it's recent (within 10 seconds of now OR cleaner logic)
+        // If we are "resuming" a running pump, serverTime is the start time.
+        // But liveStatus.lastUpdated updates on every change. 
+        // Actually, if activeMode is running, lastUpdated IS (roughly) the start time of that mode
+        // unless the board updates it periodically? The board updates it on command receipt.
+        // So yes, it is the start time.
+        pumpStartTime = serverTime;
+    }
+
     // Update every 100ms for smooth display
     flowUpdateInterval = setInterval(() => {
         updateTotalFlowDisplay();
@@ -1397,8 +1409,25 @@ function updateLiveStatus() {
         hideButtonLoading();
     }
 
+    // STALE STATE CHECK
+    const STALE_THRESHOLD = 30 * 60 * 1000; // 30 minutes
+    const lastUpdatedTime = liveStatus.lastUpdated || liveStatus.updatedAt;
+    let isStale = false;
+
+    if (lastUpdatedTime) {
+        const diff = Date.now() - new Date(lastUpdatedTime).getTime();
+        if (diff > STALE_THRESHOLD) {
+            isStale = true;
+            console.warn('⚠️ Stale liveStatus detected. Treating as STOPPED.');
+        }
+    }
+
     // Determine pump running state from activeMode
-    const running = liveStatus.activeMode && liveStatus.activeMode !== 'NONE';
+    // If stale, assume pump is NOT running regardless of activeMode
+    let running = (liveStatus.activeMode && liveStatus.activeMode !== 'NONE');
+    if (isStale) {
+        running = false;
+    }
 
     // Check connection validity (using separate connection state)
     if (connection && !connection.online) {
@@ -1407,23 +1436,22 @@ function updateLiveStatus() {
         setPumpRunning(running);
     }
 
+    // If running, ensure start time is synced for flow calculation
+    if (running && lastUpdatedTime && (!pumpStartTime || pumpStartTime === 0)) {
+        pumpStartTime = new Date(lastUpdatedTime).getTime();
+        // Trigger immediate update
+        updateTotalFlowDisplay();
+    }
+
     // Update direction
     if (liveStatus.direction && liveStatus.direction !== currentDirection) {
         currentDirection = liveStatus.direction;
         updateDirectionDisplay();
     }
 
-    // Current RPM display is purely visual (large number)
-    // We do NOT update the input field here to avoid fighting the user
-    // (Removed el.currentRPM update as element was removed)
-
-    // Session dispensed (calculated via flow tracking in dashboard.js)
-
-
-    // Last updated
+    // Last updated display
     if (el.lastUpdated) {
-        const timeStr = liveStatus.lastUpdated || liveStatus.updatedAt;
-        el.lastUpdated.textContent = 'Last updated: ' + (timeStr ? Utils.formatRelativeTime(timeStr) : 'Never');
+        el.lastUpdated.textContent = 'Last updated: ' + (lastUpdatedTime ? Utils.formatRelativeTime(lastUpdatedTime) : 'Never');
     }
 
     updateControlsState();

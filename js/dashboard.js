@@ -74,6 +74,13 @@ async function initDashboard() {
         console.log('Session verified, initializing UI...');
 
         cacheElements();
+
+        // Force hide legacy lock modal just in case
+        if (el.userLockModal) {
+            el.userLockModal.classList.remove('active');
+            el.userLockModal.style.display = 'none';
+        }
+
         setupEventHandlers();
         setupNavigation();
 

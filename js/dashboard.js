@@ -48,7 +48,7 @@ const el = {};
 async function initDashboard() {
     console.log('Initializing dashboard...');
 
-    currentDeviceId = Utils.getSavedDeviceId();
+    currentDeviceId = Utils.getSavedDeviceId()?.trim();
     console.log('📱 Device ID:', currentDeviceId);
 
     if (!currentDeviceId) {
@@ -955,7 +955,7 @@ async function startPump() {
     setPumpRunning(true);
 
     try {
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+        const payload = {
             activeMode: 'STATUS',
             inputMode: inputMode.toUpperCase(),
             currentRPM: rpmToUse,
@@ -964,7 +964,10 @@ async function startPump() {
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()
-        });
+        };
+        console.log('🚀 Sending Start Command:', payload);
+
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update(payload);
 
         Utils.showSuccess('Pump started');
     } catch (error) {
@@ -985,13 +988,16 @@ async function stopPump() {
     setPumpRunning(false);
 
     try {
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+        const payload = {
             activeMode: 'NONE',
-            inputMode: null, // Clear inputMode to avoid conflict
+            inputMode: null,
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()
-        });
+        };
+        console.log('🛑 Sending Stop Command:', payload);
+
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update(payload);
 
         Utils.showSuccess('Pump stopped');
     } catch (error) {

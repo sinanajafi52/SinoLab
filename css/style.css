@@ -1565,21 +1565,75 @@ h3 {
     color: var(--text-muted);
 }
 
-.device-card-status {
-    font-size: 0.875rem;
-    white-space: nowrap;
+/* Online dot indicator next to name */
+.device-card-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.device-card-status.online {
+.online-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.online-dot.online {
+    background: var(--accent-green);
+    box-shadow: 0 0 6px var(--accent-green);
+}
+
+.online-dot.offline {
+    background: var(--text-muted);
+}
+
+/* Running Badge */
+.running-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px 4px 10px;
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid var(--accent-green);
+    border-radius: var(--border-radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
     color: var(--accent-green);
 }
 
-.device-card-status.offline {
-    color: var(--text-muted);
+.running-badge.inactive {
+    padding: 4px 10px;
+    opacity: 0.7;
 }
 
-.device-card-status.in-use {
+.running-text {
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stop-pump-btn {
+    padding: 2px 8px;
+    background: var(--accent-red);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.stop-pump-btn:hover {
+    background: #f87171;
+}
+
+/* Locked Badge */
+.locked-badge {
+    font-size: 0.75rem;
     color: var(--accent-orange);
+    white-space: nowrap;
 }
 
 /* Managing Badge */

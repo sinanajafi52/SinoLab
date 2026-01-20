@@ -258,12 +258,16 @@ async function getLinkedDevicesWithInfo() {
     for (const deviceId of deviceIds) {
         const info = await getDeviceInfo(deviceId);
         const conn = await getDeviceConnection(deviceId);
+        const liveStatus = await getDeviceLiveStatus(deviceId);
         const linkData = linkedDevices[deviceId];
         const sessionStatus = await Session.getSessionStatus(deviceId);
 
         // Check if I own the session
         const session = await Session.getDeviceSession(deviceId);
         const isMySession = session ? Session.isMySession(session) : false;
+
+        // Check if pump is running
+        const isPumpRunning = liveStatus?.activeMode && liveStatus.activeMode !== 'NONE';
 
         devicesWithInfo.push({
             deviceId,
@@ -274,7 +278,9 @@ async function getLinkedDevicesWithInfo() {
             online: conn?.online === true,
             sessionAvailable: sessionStatus.available,
             sessionMessage: sessionStatus.message,
-            isMySession: isMySession
+            isMySession: isMySession,
+            isPumpRunning: isPumpRunning,
+            activeMode: liveStatus?.activeMode || 'NONE'
         });
     }
 
@@ -309,22 +315,32 @@ async function renderDeviceList(containerId = 'deviceList') {
         }
 
         container.innerHTML = devices.map(device => {
-            // Determine status display
-            let statusClass = device.online ? 'online' : 'offline';
-            let statusText = device.online ? '🟢 Online' : '🔴 Offline';
+            // Online status indicator (small dot)
+            const onlineIndicator = device.online ?
+                '<span class="online-dot online"></span>' :
+                '<span class="online-dot offline"></span>';
 
-            // Show session status if device is in use by another user
-            if (!device.sessionAvailable && !device.isMySession) {
-                statusClass = 'in-use';
-                statusText = '🔒 ' + device.sessionMessage;
-            }
-
-            // Managing badge HTML (simplified, no release button inside)
+            // Managing badge HTML
             const managingBadge = device.isMySession ?
                 `<div class="managing-badge">
                     <span class="managing-text">Managing</span>
                     <button class="release-btn" data-release-device="${device.deviceId}" title="Release control">✕</button>
                 </div>` : '';
+
+            // Running status with Stop button (only if pump is running and I have session)
+            const runningBadge = (device.isPumpRunning && device.isMySession) ?
+                `<div class="running-badge">
+                    <span class="running-text">Running</span>
+                    <button class="stop-pump-btn" data-stop-device="${device.deviceId}" title="Stop pump">Stop</button>
+                </div>` :
+                (device.isPumpRunning ?
+                    `<div class="running-badge inactive">
+                        <span class="running-text">Running</span>
+                    </div>` : '');
+
+            // Locked by another user indicator
+            const lockedIndicator = (!device.sessionAvailable && !device.isMySession) ?
+                `<div class="locked-badge">🔒 ${device.sessionMessage}</div>` : '';
 
             return `
             <div class="device-card ${!device.sessionAvailable && !device.isMySession ? 'locked' : ''} ${device.isMySession ? 'my-session' : ''}" data-device-id="${device.deviceId}">
@@ -332,13 +348,13 @@ async function renderDeviceList(containerId = 'deviceList') {
                 <div class="device-card-info">
                     <div class="device-card-name">
                         ${device.nickname || device.info?.deviceName || 'Frog Pump'}
+                        ${onlineIndicator}
                     </div>
                     <div class="device-card-id">${device.deviceId}</div>
                 </div>
                 <div class="device-card-actions">
-                    <div class="device-card-status ${statusClass}">
-                        <span>${statusText}</span>
-                    </div>
+                    ${lockedIndicator}
+                    ${runningBadge}
                     ${managingBadge}
                 </div>
             </div>
@@ -348,8 +364,9 @@ async function renderDeviceList(containerId = 'deviceList') {
         // Add click handlers for device selection
         container.querySelectorAll('.device-card').forEach(card => {
             card.addEventListener('click', (e) => {
-                // Don't trigger if clicking release button
-                if (e.target.classList.contains('release-btn')) return;
+                // Don't trigger if clicking buttons
+                if (e.target.classList.contains('release-btn') ||
+                    e.target.classList.contains('stop-pump-btn')) return;
 
                 const deviceId = card.dataset.deviceId;
                 selectDevice(deviceId);
@@ -367,6 +384,32 @@ async function renderDeviceList(containerId = 'deviceList') {
                     Utils.hideLoading();
                     Utils.showSuccess('Control released');
                     await renderDeviceList(); // Refresh the list
+                }
+            });
+        });
+
+        // Add click handlers for stop pump buttons
+        container.querySelectorAll('.stop-pump-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const deviceId = btn.dataset.stopDevice;
+
+                Utils.showLoading('Stopping pump...');
+                try {
+                    await FirebaseApp.getDeviceRef(deviceId).child('liveStatus').update({
+                        activeMode: 'NONE',
+                        inputMode: null,
+                        acknowledged: false,
+                        lastIssuedBy: Auth.getCurrentUserId(),
+                        lastUpdated: new Date().toISOString()
+                    });
+                    Utils.hideLoading();
+                    Utils.showSuccess('Pump stopped');
+                    await renderDeviceList(); // Refresh the list
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to stop pump');
+                    console.error('Stop pump error:', error);
                 }
             });
         });

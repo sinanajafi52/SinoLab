@@ -1133,11 +1133,17 @@
             bottom: 0;
             background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(5px);
-            display: flex;
+            display: none;
+            /* Hidden by default */
             align-items: center;
             justify-content: center;
             z-index: 1000;
             animation: fadeIn 0.2s ease;
+        }
+
+        .modal-backdrop.active {
+            display: flex;
+            /* Only show when active class is added */
         }
 
         @keyframes fadeIn {
@@ -1632,8 +1638,8 @@
         </main>
     </div>
 
-    <!-- User Lock Modal (Blocking) -->
-    <div id="userLockModal" class="modal-backdrop">
+    <!-- User Lock Modal (Blocking) - Hidden by default -->
+    <div id="userLockModal" class="modal-backdrop" style="display: none;">
         <div class="modal-content">
             <div class="modal-icon" style="font-size: 4rem; margin-bottom: 20px; animation: pulse 2s infinite;">⛔</div>
             <h3 class="modal-title" style="color: #ef4444; font-size: 1.5rem; margin-bottom: 10px;">Access Denied</h3>

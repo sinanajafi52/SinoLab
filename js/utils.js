@@ -412,6 +412,46 @@ function showWarning(message) {
     showToast(message, 'warning');
 }
 
+/**
+ * Show a blocking error popup (centered modal)
+ * Use for important errors that need user attention (e.g., access denied)
+ * @param {string} title - Error title
+ * @param {string} message - Error message
+ * @param {Function} onClose - Callback when closed
+ */
+function showBlockingError(title, message, onClose = null) {
+    // Remove existing if any
+    const existing = document.querySelector('.blocking-error-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'blocking-error-overlay';
+    overlay.innerHTML = `
+        <div class="blocking-error-content">
+            <div class="blocking-error-icon">⛔</div>
+            <h3 class="blocking-error-title">${title}</h3>
+            <p class="blocking-error-message">${message}</p>
+            <button class="blocking-error-btn">OK</button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const closeBtn = overlay.querySelector('.blocking-error-btn');
+    closeBtn.addEventListener('click', () => {
+        overlay.remove();
+        if (onClose) onClose();
+    });
+
+    // Also close on overlay click
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.remove();
+            if (onClose) onClose();
+        }
+    });
+}
+
 // ========================================
 // LOADING STATE
 // ========================================
@@ -567,6 +607,7 @@ window.Utils = {
     showSuccess,
     showError,
     showWarning,
+    showBlockingError,
 
     // Loading
     showLoading,

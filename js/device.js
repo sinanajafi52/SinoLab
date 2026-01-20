@@ -209,7 +209,11 @@ async function selectDevice(deviceId) {
 
         if (!result.success) {
             Utils.hideLoading();
-            Utils.showError(result.message);
+            // Show blocking error popup for "in use" errors
+            Utils.showBlockingError(
+                'Access Denied',
+                result.message
+            );
             return;
         }
 

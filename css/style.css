@@ -1390,48 +1390,44 @@ h3 {
     z-index: 1000;
 }
 
+/* Regular Toast Container - Bottom Right */
 .toast-container {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    bottom: var(--spacing-lg);
+    right: var(--spacing-lg);
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    gap: var(--spacing-sm);
     z-index: 10000;
-    pointer-events: none;
+    max-width: 350px;
 }
 
 .toast {
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-lg) var(--spacing-xl);
-    background: linear-gradient(145deg, #1a1a1a 0%, #0f0f0f 100%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: var(--border-radius-lg);
-    min-width: 320px;
-    max-width: 90%;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    pointer-events: auto;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s ease;
 }
 
-@keyframes popIn {
+@keyframes slideIn {
     from {
         opacity: 0;
-        transform: scale(0.9) translateY(-20px);
+        transform: translateX(100%);
     }
 
     to {
         opacity: 1;
-        transform: scale(1) translateY(0);
+        transform: translateX(0);
     }
 }
 
 .toast-icon {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     flex-shrink: 0;
 }
 
@@ -1440,28 +1436,22 @@ h3 {
 }
 
 .toast-message {
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 500;
     color: var(--text-primary);
 }
 
 .toast-close {
-    background: rgba(255, 255, 255, 0.1);
+    background: transparent;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-size: 1.25rem;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
     cursor: pointer;
-    transition: all var(--transition-fast);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 0;
+    line-height: 1;
 }
 
 .toast-close:hover {
-    background: rgba(255, 255, 255, 0.2);
     color: var(--text-primary);
 }
 
@@ -1495,6 +1485,81 @@ h3 {
 
 .toast.info .toast-icon {
     color: var(--accent-cyan);
+}
+
+/* Blocking Error Modal - Centered */
+.blocking-error-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+    animation: fadeIn 0.2s ease;
+}
+
+.blocking-error-content {
+    background: linear-gradient(145deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-xl);
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.blocking-error-icon {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-md);
+}
+
+.blocking-error-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--accent-red);
+    margin-bottom: var(--spacing-sm);
+}
+
+.blocking-error-message {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-lg);
+    line-height: 1.5;
+}
+
+.blocking-error-btn {
+    width: 100%;
+    padding: var(--spacing-md);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--border-radius-md);
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.blocking-error-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
 }
 
 /* ========================================

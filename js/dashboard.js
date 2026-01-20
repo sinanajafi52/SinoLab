@@ -743,14 +743,14 @@ function stopFlowTracking() {
     pumpStartTime = null;
 
     if (el.totalFlowValue) {
-        el.totalFlowValue.textContent = '0.000';
+        el.totalFlowValue.textContent = '0.00';
     }
 }
 
 function updateTotalFlowDisplay() {
     if (!isPumpRunning || !pumpStartTime) {
         if (el.totalFlowValue) {
-            el.totalFlowValue.textContent = '0.000';
+            el.totalFlowValue.textContent = '0.00';
         }
         return;
     }
@@ -766,10 +766,10 @@ function updateTotalFlowDisplay() {
     // Total mL = flow rate (mL/min) * time (min)
     sessionFlowMl = currentFlowRate * elapsedMin;
 
-    // Convert to Liters and display with 3 decimal places
+    // Convert to Liters and display with 2 decimal places
     const sessionLiters = sessionFlowMl / 1000;
     if (el.totalFlowValue) {
-        el.totalFlowValue.textContent = sessionLiters.toFixed(3);
+        el.totalFlowValue.textContent = sessionLiters.toFixed(2);
     }
 
     // Update runtime display as well

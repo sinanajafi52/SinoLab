@@ -84,6 +84,10 @@ let targetFlow = 0;  // Separate flow value
 let inputMode = 'rpm';  // 'rpm' or 'flow' - which control is active
 let isFlowInputFocused = false;  // Track if user is typing in flow input
 let dispenseMode = 'rpm'; // 'rpm' or 'volume'
+let flowUpdateInterval = null; // Flow tracking interval
+let pumpStartTime = null; // Timestamp when pump started
+let sessionFlowMl = 0; // Total flow in current session (mL)
+let currentFlowRate = 0; // Current flow rate (mL/min)
 
 // Firebase listeners
 let liveStatusListener = null;

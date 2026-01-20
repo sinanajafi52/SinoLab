@@ -193,6 +193,7 @@ function cacheElements() {
     el.exitDashboardBtn = document.getElementById('exitDashboardBtn');
     el.forceUnlockBtn = document.getElementById('forceUnlockBtn');
     el.leaveDeviceBtn = document.getElementById('leaveDeviceBtn');
+    el.leaveDeviceBtn = document.getElementById('leaveDeviceBtn');
 }
 
 // ========================================

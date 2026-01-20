@@ -261,6 +261,10 @@ async function getLinkedDevicesWithInfo() {
         const linkData = linkedDevices[deviceId];
         const sessionStatus = await Session.getSessionStatus(deviceId);
 
+        // Check if I own the session
+        const session = await Session.getDeviceSession(deviceId);
+        const isMySession = session ? Session.isMySession(session) : false;
+
         devicesWithInfo.push({
             deviceId,
             nickname: linkData?.nickname || '',
@@ -269,7 +273,8 @@ async function getLinkedDevicesWithInfo() {
             status: conn || {},
             online: conn?.online === true,
             sessionAvailable: sessionStatus.available,
-            sessionMessage: sessionStatus.message
+            sessionMessage: sessionStatus.message,
+            isMySession: isMySession
         });
     }
 
@@ -309,19 +314,28 @@ async function renderDeviceList(containerId = 'deviceList') {
             let statusText = device.online ? '🟢 Online' : '🔴 Offline';
 
             // Show session status if device is in use by another user
-            if (!device.sessionAvailable) {
+            if (!device.sessionAvailable && !device.isMySession) {
                 statusClass = 'in-use';
                 statusText = '🔒 ' + device.sessionMessage;
             }
 
+            // Managing badge HTML
+            const managingBadge = device.isMySession ?
+                `<div class="managing-badge">
+                    <span class="managing-icon">👤</span>
+                    <span class="managing-text">Managing</span>
+                    <button class="release-btn" data-release-device="${device.deviceId}" title="Release control">✕</button>
+                </div>` : '';
+
             return `
-            <div class="device-card ${!device.sessionAvailable ? 'locked' : ''}" data-device-id="${device.deviceId}">
+            <div class="device-card ${!device.sessionAvailable && !device.isMySession ? 'locked' : ''} ${device.isMySession ? 'my-session' : ''}" data-device-id="${device.deviceId}">
                 <div class="device-card-icon">🐸</div>
                 <div class="device-card-info">
                     <div class="device-card-name">
                         ${device.nickname || device.info?.deviceName || 'Frog Pump'}
                     </div>
                     <div class="device-card-id">${device.deviceId}</div>
+                    ${managingBadge}
                 </div>
                 <div class="device-card-status ${statusClass}">
                     <span>${statusText}</span>
@@ -330,11 +344,29 @@ async function renderDeviceList(containerId = 'deviceList') {
         `;
         }).join('');
 
-        // Add click handlers
+        // Add click handlers for device selection
         container.querySelectorAll('.device-card').forEach(card => {
-            card.addEventListener('click', () => {
+            card.addEventListener('click', (e) => {
+                // Don't trigger if clicking release button
+                if (e.target.classList.contains('release-btn')) return;
+
                 const deviceId = card.dataset.deviceId;
                 selectDevice(deviceId);
+            });
+        });
+
+        // Add click handlers for release buttons
+        container.querySelectorAll('.release-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const deviceId = btn.dataset.releaseDevice;
+                if (confirm('Are you sure you want to release control of this device?')) {
+                    Utils.showLoading('Releasing control...');
+                    await Session.releaseSession(deviceId);
+                    Utils.hideLoading();
+                    Utils.showSuccess('Control released');
+                    await renderDeviceList(); // Refresh the list
+                }
             });
         });
     } catch (error) {

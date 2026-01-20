@@ -1420,6 +1420,135 @@ h3 {
 }
 
 /* ========================================
+   DEVICE CARDS
+   ======================================== */
+.device-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.device-card {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.device-card:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-secondary);
+}
+
+.device-card.locked {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.device-card.my-session {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.device-card.my-session:hover {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+.device-card-icon {
+    font-size: 2rem;
+    width: 48px;
+    height: 48px;
+    background: var(--accent-primary);
+    border-radius: var(--border-radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.device-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.device-card-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.device-card-id {
+    font-size: 0.8rem;
+    font-family: monospace;
+    color: var(--text-muted);
+}
+
+.device-card-status {
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.device-card-status.online {
+    color: var(--accent-green);
+}
+
+.device-card-status.offline {
+    color: var(--text-muted);
+}
+
+.device-card-status.in-use {
+    color: var(--accent-orange);
+}
+
+/* Managing Badge */
+.managing-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 4px 10px;
+    background: #3b82f6;
+    border-radius: var(--border-radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+}
+
+.managing-icon {
+    font-size: 0.8rem;
+}
+
+.managing-text {
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.release-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-left: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.release-btn:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+/* ========================================
    RESPONSIVE - MOBILE
    ======================================== */
 @media (max-width: 768px) {

@@ -1203,6 +1203,7 @@ async function dispenseRpmBased() {
         // 2. Trigger action
         await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
             activeMode: 'RPM',
+            inputMode: null, // Clear inputMode to avoid conflict
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()
@@ -1297,6 +1298,7 @@ async function dispenseVolume() {
         // 2. Trigger action
         await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
             activeMode: 'VOLUME',
+            inputMode: null, // Clear inputMode to avoid conflict
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()
@@ -1447,7 +1449,12 @@ function updateLiveStatus() {
 
     // Last updated display
     if (el.lastUpdated) {
-        el.lastUpdated.textContent = 'Last updated: ' + (lastUpdatedTime ? Utils.formatRelativeTime(lastUpdatedTime) : 'Never');
+        if (lastUpdatedTime && !isNaN(new Date(lastUpdatedTime).getTime())) {
+            el.lastUpdated.textContent = 'Last updated: ' + Utils.formatRelativeTime(lastUpdatedTime);
+        } else {
+            el.lastUpdated.textContent = 'Last updated: Never';
+            if (lastUpdatedTime) console.warn('Invalid lastUpdatedTime:', lastUpdatedTime);
+        }
     }
 
     updateControlsState();

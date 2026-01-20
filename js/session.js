@@ -50,7 +50,10 @@ function isSessionStale(session) {
     const now = Date.now();
     const elapsed = now - session.lastActive;
 
-    return elapsed > SESSION_TIMEOUT;
+    // Session is stale if:
+    // 1. Inactive for longer than timeout
+    // 2. Timestamp is in the future (clock skew > 1 minute)
+    return elapsed > SESSION_TIMEOUT || elapsed < -60000;
 }
 
 /**
@@ -61,8 +64,19 @@ function isSessionStale(session) {
 function isMySession(session) {
     if (!session) return false;
 
-    const currentUid = Auth.getCurrentUserId();
-    return session.activeUser === currentUid;
+    const currentUser = Auth.getCurrentUser();
+    if (!currentUser) return false;
+
+    // Check UID match
+    if (session.activeUser === currentUser.uid) return true;
+
+    // Check Email match (Fallback for re-logins with different UIDs)
+    if (session.userEmail && currentUser.email &&
+        session.userEmail.toLowerCase() === currentUser.email.toLowerCase()) {
+        return true;
+    }
+
+    return false;
 }
 
 /**

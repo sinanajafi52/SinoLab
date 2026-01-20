@@ -101,6 +101,7 @@ let activeControllerListener = null;
 let activeControllerInterval = null; // Heartbeat
 let currentAuthUser = null;
 let imActiveController = false;
+let hasInitialNavigated = false; // Track if we've navigated based on activeMode on first load
 
 // Control state (Removed controlMode as it's no longer used)
 
@@ -574,6 +575,63 @@ function showRunningLockMessage() {
             el.lockOverlay.classList.remove('show');
         }, 2000);
     }
+}
+
+/**
+ * Navigate to the appropriate page based on activeMode
+ * STATUS/NONE → Status page
+ * RPM → Dispense page with RPM tab
+ * VOLUME → Dispense page with Volume tab
+ */
+function navigateToActiveMode(activeMode) {
+    const navItems = document.querySelectorAll('.sidebar-nav-item');
+    const pages = document.querySelectorAll('.dashboard-page');
+
+    // Default to status page
+    let targetPage = 'status';
+    let dispenseTab = null;
+
+    if (activeMode === 'RPM') {
+        targetPage = 'dispense';
+        dispenseTab = 'rpm';
+    } else if (activeMode === 'VOLUME') {
+        targetPage = 'dispense';
+        dispenseTab = 'volume';
+    }
+    // STATUS and NONE stay on status page
+
+    // Update nav active state
+    navItems.forEach(nav => {
+        nav.classList.remove('active');
+        if (nav.dataset.page === targetPage) {
+            nav.classList.add('active');
+        }
+    });
+
+    // Show target page
+    pages.forEach(p => p.classList.remove('active'));
+    const targetPageEl = document.getElementById(targetPage + 'Page');
+    if (targetPageEl) targetPageEl.classList.add('active');
+
+    // If dispense page, also switch to correct tab
+    if (dispenseTab) {
+        // Use a slight delay to ensure elements are ready
+        setTimeout(() => {
+            if (dispenseTab === 'rpm') {
+                if (el.rpmModeTab) el.rpmModeTab.classList.add('active');
+                if (el.volumeModeTab) el.volumeModeTab.classList.remove('active');
+                if (el.rpmDispensePanel) el.rpmDispensePanel.classList.add('active');
+                if (el.volumeDispensePanel) el.volumeDispensePanel.classList.remove('active');
+            } else {
+                if (el.rpmModeTab) el.rpmModeTab.classList.remove('active');
+                if (el.volumeModeTab) el.volumeModeTab.classList.add('active');
+                if (el.rpmDispensePanel) el.rpmDispensePanel.classList.remove('active');
+                if (el.volumeDispensePanel) el.volumeDispensePanel.classList.add('active');
+            }
+        }, 100);
+    }
+
+    console.log(`Navigated to ${targetPage} page${dispenseTab ? ` (${dispenseTab} tab)` : ''} based on activeMode: ${activeMode}`);
 }
 
 // ========================================
@@ -1397,6 +1455,12 @@ function subscribeToDevice() {
     liveStatusListener = deviceRef.child('liveStatus').on('value', (snapshot) => {
         liveStatus = snapshot.val() || {};
         updateLiveStatus();
+
+        // On first load, navigate to correct page based on activeMode
+        if (!hasInitialNavigated && liveStatus.activeMode) {
+            hasInitialNavigated = true;
+            navigateToActiveMode(liveStatus.activeMode);
+        }
     });
 
     // Tube Config updates (Settings)

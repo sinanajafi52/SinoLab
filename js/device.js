@@ -319,10 +319,9 @@ async function renderDeviceList(containerId = 'deviceList') {
                 statusText = '🔒 ' + device.sessionMessage;
             }
 
-            // Managing badge HTML
+            // Managing badge HTML (simplified, no release button inside)
             const managingBadge = device.isMySession ?
                 `<div class="managing-badge">
-                    <span class="managing-icon">👤</span>
                     <span class="managing-text">Managing</span>
                     <button class="release-btn" data-release-device="${device.deviceId}" title="Release control">✕</button>
                 </div>` : '';
@@ -335,10 +334,12 @@ async function renderDeviceList(containerId = 'deviceList') {
                         ${device.nickname || device.info?.deviceName || 'Frog Pump'}
                     </div>
                     <div class="device-card-id">${device.deviceId}</div>
-                    ${managingBadge}
                 </div>
-                <div class="device-card-status ${statusClass}">
-                    <span>${statusText}</span>
+                <div class="device-card-actions">
+                    <div class="device-card-status ${statusClass}">
+                        <span>${statusText}</span>
+                    </div>
+                    ${managingBadge}
                 </div>
             </div>
         `;

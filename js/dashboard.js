@@ -81,6 +81,11 @@ async function initDashboard() {
             el.userLockModal.style.display = 'none';
         }
 
+        // Show Leave Device button since we have the session
+        if (el.leaveDeviceBtn) {
+            el.leaveDeviceBtn.style.display = 'flex';
+        }
+
         setupEventHandlers();
         setupNavigation();
 
@@ -377,16 +382,14 @@ function setupEventHandlers() {
     }
 
     // Leave Device (Active Release)
+    // Leave Device (Active Release)
     if (el.leaveDeviceBtn) {
         el.leaveDeviceBtn.addEventListener('click', async () => {
-            if (!currentDeviceId) return;
-            Utils.showLoading('Releasing control...');
-            try {
-                // Remove lock explicitly
-                const ref = FirebaseApp.getDeviceRef(currentDeviceId).child('activeController');
-                await ref.remove();
-            } catch (e) { console.error(e); }
-            Utils.navigateTo('device.html');
+            if (confirm('Are you sure you want to leave this device?')) {
+                Utils.showLoading('Leaving device...');
+                await Session.releaseSession(currentDeviceId);
+                Utils.navigateTo('device.html');
+            }
         });
     }
 
@@ -398,15 +401,9 @@ function setupEventHandlers() {
             if (confirm('Are you sure? This will kick out any other user controlling this device.')) {
                 Utils.showLoading('Force unlocking...');
                 try {
-                    const ref = FirebaseApp.getDeviceRef(currentDeviceId).child('activeController');
-                    await ref.set({
-                        uid: currentAuthUser.uid,
-                        email: currentAuthUser.email || 'Unknown',
-                        startTime: Date.now(),
-                        lastActive: Date.now()
-                    });
-                    handleControllerLock(false);
-                    Utils.hideLoading();
+                    // Use Session module to force claim
+                    await Session.claimSession(currentDeviceId);
+                    window.location.reload(); // Refresh to init session properly
                 } catch (e) {
                     console.error('Force unlock failed', e);
                     Utils.showError('Unlock failed: ' + e.message);

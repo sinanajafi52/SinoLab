@@ -1115,6 +1115,9 @@ async function stopPump() {
         const payload = {
             activeMode: 'NONE',
             inputMode: null,
+            currentRPM: null,        // Clear runtime values
+            currentFlowRate: null,   // Clear runtime values
+            direction: null,         // Clear runtime values
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()
@@ -1481,6 +1484,46 @@ function subscribeToDevice() {
         maintenance = snapshot.val() || {};
         updateMaintenanceInfo();
         updateTubeMaintenanceUI();
+    });
+
+    // RPM Dispense settings - load and populate form
+    deviceRef.child('rpmDispense').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            console.log('📥 Loaded RPM Dispense settings:', data);
+            if (el.dispenseRpmInput && data.rpm) el.dispenseRpmInput.value = data.rpm;
+            if (el.dispenseRpmSlider && data.rpm) el.dispenseRpmSlider.value = data.rpm;
+            if (el.dispenseOnTime && data.onTime !== undefined) el.dispenseOnTime.value = data.onTime / 1000; // Convert ms to seconds
+            if (el.dispenseOffTime && data.offTime !== undefined) el.dispenseOffTime.value = data.offTime / 1000;
+
+            // Set direction
+            if (data.direction === 'CCW') {
+                if (el.dispenseRpmDirCCW) el.dispenseRpmDirCCW.classList.add('active');
+                if (el.dispenseRpmDirCW) el.dispenseRpmDirCW.classList.remove('active');
+            } else {
+                if (el.dispenseRpmDirCW) el.dispenseRpmDirCW.classList.add('active');
+                if (el.dispenseRpmDirCCW) el.dispenseRpmDirCCW.classList.remove('active');
+            }
+        }
+    });
+
+    // Volume Dispense settings - load and populate form
+    deviceRef.child('volumeDispense').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            console.log('📥 Loaded Volume Dispense settings:', data);
+            if (el.volumeTarget && data.targetVolume) el.volumeTarget.value = data.targetVolume;
+            if (el.volumeOffTime && data.offTime !== undefined) el.volumeOffTime.value = data.offTime / 1000;
+
+            // Set direction
+            if (data.direction === 'CCW') {
+                if (el.volumeDirCCW) el.volumeDirCCW.classList.add('active');
+                if (el.volumeDirCW) el.volumeDirCW.classList.remove('active');
+            } else {
+                if (el.volumeDirCW) el.volumeDirCW.classList.add('active');
+                if (el.volumeDirCCW) el.volumeDirCCW.classList.remove('active');
+            }
+        }
     });
 
     // Connection updates

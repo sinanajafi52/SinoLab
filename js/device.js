@@ -400,9 +400,12 @@ async function renderDeviceList(containerId = 'deviceList') {
 
                 Utils.showLoading('Stopping pump...');
                 try {
+                    // Clear operational values for safety (Defense in Depth)
                     await FirebaseApp.getDeviceRef(deviceId).child('liveStatus').update({
                         activeMode: 'NONE',
                         inputMode: null,
+                        currentRPM: 0,
+                        currentFlowRate: null,
                         acknowledged: false,
                         lastIssuedBy: Auth.getCurrentUserId(),
                         lastUpdated: new Date().toISOString()

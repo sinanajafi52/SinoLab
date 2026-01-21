@@ -1127,9 +1127,13 @@ async function stopPump() {
     setPumpRunning(false);
 
     try {
+        // Clear operational values for safety (Defense in Depth)
+        // Direction is preserved as it's a user preference
         const payload = {
             activeMode: 'NONE',
             inputMode: null,
+            currentRPM: 0,
+            currentFlowRate: null,
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()

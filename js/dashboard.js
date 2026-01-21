@@ -1535,6 +1535,9 @@ function subscribeToDevice() {
                 if (el.volumeDirCW) el.volumeDirCW.classList.add('active');
                 if (el.volumeDirCCW) el.volumeDirCCW.classList.remove('active');
             }
+
+            // Recalculate estimated time with loaded values
+            updateEstimatedTime();
         }
     });
 

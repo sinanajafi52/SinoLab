@@ -1371,7 +1371,7 @@ async function dispenseRpmBased() {
 // VOLUME-BASED DISPENSE
 // ========================================
 // Default RPM for volume-based dispense (auto-calculated from calibration)
-const VOLUME_DISPENSE_RPM = 200;
+const VOLUME_DISPENSE_RPM = 120; // Fixed RPM for volume dispense
 
 function updateEstimatedTime() {
     if (!el.estimatedTime) return;

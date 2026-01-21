@@ -1420,11 +1420,11 @@ async function dispenseVolume() {
         return;
     }
 
-    const volume = parseFloat(el.volumeInput?.value) || 0;
+    const requestedVolume = parseFloat(el.volumeInput?.value) || 0;
     const offTime = parseFloat(el.volumeOffTime?.value) || 0;
     const direction = el.volumeDirCCW?.classList.contains('active') ? 'CCW' : 'CW';
 
-    if (volume <= 0) {
+    if (requestedVolume <= 0) {
         Utils.showWarning('Please enter a valid volume');
         return;
     }
@@ -1434,27 +1434,68 @@ async function dispenseVolume() {
         return;
     }
 
+    // Constants
+    const VOLUME_DISPENSE_RPM = 120;
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
+
+    // Calculate flow rate and time
+    const flowRatePerSec = (VOLUME_DISPENSE_RPM * mlPerRev) / 60; // mL per second
+    const rawOnTimeSec = requestedVolume / flowRatePerSec;
+
+    // Round to 0.1 second precision
+    const roundedOnTimeSec = Math.round(rawOnTimeSec * 10) / 10;
+
+    // Calculate actual volume that will be dispensed
+    const actualVolume = roundedOnTimeSec * flowRatePerSec;
+
+    // Check if adjustment is needed (more than 0.01 mL difference)
+    const needsAdjustment = Math.abs(actualVolume - requestedVolume) > 0.01;
+
+    if (needsAdjustment) {
+        // Show adjustment popup
+        Utils.showVolumeAdjustment(
+            requestedVolume,
+            actualVolume,
+            roundedOnTimeSec,
+            (confirmedVolume) => {
+                // User confirmed - update input and proceed
+                if (el.volumeInput) {
+                    el.volumeInput.value = confirmedVolume.toFixed(2);
+                }
+                executeVolumeDispense(VOLUME_DISPENSE_RPM, roundedOnTimeSec, offTime, direction, confirmedVolume);
+            },
+            null // onCancel - do nothing
+        );
+    } else {
+        // No adjustment needed - proceed directly
+        executeVolumeDispense(VOLUME_DISPENSE_RPM, roundedOnTimeSec, offTime, direction, requestedVolume);
+    }
+}
+
+async function executeVolumeDispense(rpm, onTimeSec, offTimeSec, direction, volume) {
     // Optimistic UI update first
     setPumpRunning(true);
 
     try {
-        // 1. Set parameters
+        // Save with unified structure (same as rpmDispense)
         await FirebaseApp.getDeviceRef(currentDeviceId).child('volumeDispense').set({
-            targetVolume: volume,
-            offTime: offTime * 1000, // Convert to ms
+            rpm: rpm,
+            onTime: Math.round(onTimeSec * 1000), // Convert to ms
+            offTime: Math.round(offTimeSec * 1000), // Convert to ms
             direction: direction
         });
 
-        // 2. Trigger action
+        // Trigger action
         await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
             activeMode: 'VOLUME',
-            inputMode: null, // Clear inputMode to avoid conflict
+            currentRPM: rpm,
+            inputMode: null,
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()
         });
 
-        Utils.showSuccess(`Dispensing ${volume} mL`);
+        Utils.showSuccess(`Dispensing ${volume.toFixed(2)} mL`);
     } catch (error) {
         console.error('Error dispensing volume:', error);
         setPumpRunning(false);

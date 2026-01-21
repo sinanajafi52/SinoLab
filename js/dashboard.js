@@ -1484,25 +1484,32 @@ function subscribeToDevice() {
             if (liveStatus.activeMode === 'STATUS' && liveStatus.currentRPM > 0) {
                 console.log('📥 Loading Status page values from liveStatus:', liveStatus);
 
-                // Set RPM
-                if (el.rpmInput && liveStatus.currentRPM) {
-                    el.rpmInput.value = liveStatus.currentRPM;
-                    currentRPM = liveStatus.currentRPM;
-                }
-                if (el.rpmSlider && liveStatus.currentRPM) {
-                    el.rpmSlider.value = liveStatus.currentRPM;
+                // Set input mode first (RPM or FLOW)
+                if (liveStatus.inputMode) {
+                    inputMode = liveStatus.inputMode.toLowerCase();
+                    updateInputModeDisplay();
                 }
 
-                // Set Flow Rate (for both display and input)
-                if (liveStatus.currentFlowRate) {
+                // Set RPM (always, even if in flow mode - this is the calculated RPM)
+                if (liveStatus.currentRPM) {
+                    currentRPM = liveStatus.currentRPM;
+                    targetRPM = liveStatus.currentRPM;
+
+                    if (el.rpmInput) el.rpmInput.value = liveStatus.currentRPM;
+                    if (el.rpmSlider) el.rpmSlider.value = liveStatus.currentRPM;
+                }
+
+                // Set Flow Rate
+                if (liveStatus.currentFlowRate && liveStatus.currentFlowRate > 0) {
                     currentFlowRate = liveStatus.currentFlowRate;
+                    targetFlow = liveStatus.currentFlowRate;
 
                     // Update flow display value (the large number)
                     if (el.flowValue) {
                         el.flowValue.textContent = liveStatus.currentFlowRate.toFixed(2);
                     }
 
-                    // Update flow input field (if in flow mode)
+                    // Update flow input field
                     if (el.flowInput) {
                         el.flowInput.value = liveStatus.currentFlowRate.toFixed(2);
                     }
@@ -1512,11 +1519,6 @@ function subscribeToDevice() {
                 if (liveStatus.direction) {
                     currentDirection = liveStatus.direction;
                     updateDirectionDisplay();
-                }
-
-                // Set input mode display
-                if (liveStatus.inputMode) {
-                    updateInputModeDisplay();
                 }
             }
         }

@@ -1493,10 +1493,19 @@ function subscribeToDevice() {
                     el.rpmSlider.value = liveStatus.currentRPM;
                 }
 
-                // Set Flow Rate (if in flow mode)
-                if (el.flowInput && liveStatus.currentFlowRate) {
-                    el.flowInput.value = liveStatus.currentFlowRate.toFixed(2);
+                // Set Flow Rate (for both display and input)
+                if (liveStatus.currentFlowRate) {
                     currentFlowRate = liveStatus.currentFlowRate;
+
+                    // Update flow display value (the large number)
+                    if (el.flowValue) {
+                        el.flowValue.textContent = liveStatus.currentFlowRate.toFixed(2);
+                    }
+
+                    // Update flow input field (if in flow mode)
+                    if (el.flowInput) {
+                        el.flowInput.value = liveStatus.currentFlowRate.toFixed(2);
+                    }
                 }
 
                 // Set Direction
@@ -1667,6 +1676,10 @@ function updateLiveStatus() {
     // If running, ensure flow tracking is active
     if (running && !flowUpdateInterval) {
         // This is a resume scenario (page load with pump already running)
+        // Ensure we have currentFlowRate from liveStatus for Total Flow calculation
+        if (liveStatus.currentFlowRate && liveStatus.currentFlowRate > 0) {
+            currentFlowRate = liveStatus.currentFlowRate;
+        }
         startFlowTracking(true);
     }
 

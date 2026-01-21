@@ -764,22 +764,33 @@ function updateFlowDisplay() {
 // ========================================
 // REAL-TIME TOTAL FLOW CALCULATION
 // ========================================
-function startFlowTracking() {
+let userStartedPump = false; // Track if we started the pump in this session
+
+function startFlowTracking(isResuming = false) {
     if (flowUpdateInterval) return; // Already tracking
 
-    pumpStartTime = Date.now();
+    // Always reset session values
     sessionFlowMl = 0;
 
-    // Use server time if available to resume session
-    if (liveStatus && (liveStatus.lastUpdated || liveStatus.updatedAt)) {
-        const serverTime = new Date(liveStatus.lastUpdated || liveStatus.updatedAt).getTime();
-        // Only use server time if it's recent (within 10 seconds of now OR cleaner logic)
-        // If we are "resuming" a running pump, serverTime is the start time.
-        // But liveStatus.lastUpdated updates on every change. 
-        // Actually, if activeMode is running, lastUpdated IS (roughly) the start time of that mode
-        // unless the board updates it periodically? The board updates it on command receipt.
-        // So yes, it is the start time.
-        pumpStartTime = serverTime;
+    if (isResuming && liveStatus && liveStatus.lastUpdated) {
+        // Resuming a running pump on page load - use server time
+        const serverTime = new Date(liveStatus.lastUpdated).getTime();
+        const now = Date.now();
+        const elapsed = now - serverTime;
+
+        // Only use server time if it's reasonable (within last hour)
+        // Otherwise, assume something is wrong and use current time
+        if (elapsed > 0 && elapsed < 3600000) {
+            pumpStartTime = serverTime;
+            console.log('📊 Resuming flow tracking from server time, elapsed:', Math.round(elapsed / 1000), 's');
+        } else {
+            pumpStartTime = now;
+            console.log('📊 Server time too old, starting fresh');
+        }
+    } else {
+        // Fresh start - use current time
+        pumpStartTime = Date.now();
+        console.log('📊 Starting flow tracking from now');
     }
 
     // Update every 100ms for smooth display
@@ -1078,6 +1089,10 @@ async function startPump() {
     // Optimistic UI update first for responsiveness
     setPumpRunning(true);
 
+    // Start flow tracking from 0 (not resuming)
+    stopFlowTracking(); // Clear any existing tracking first
+    startFlowTracking(false);
+
     try {
         const payload = {
             activeMode: 'STATUS',
@@ -1115,9 +1130,6 @@ async function stopPump() {
         const payload = {
             activeMode: 'NONE',
             inputMode: null,
-            currentRPM: null,        // Clear runtime values
-            currentFlowRate: null,   // Clear runtime values
-            direction: null,         // Clear runtime values
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()
@@ -1614,11 +1626,10 @@ function updateLiveStatus() {
         setPumpRunning(running);
     }
 
-    // If running, ensure start time is synced for flow calculation
-    if (running && lastUpdatedTime && (!pumpStartTime || pumpStartTime === 0)) {
-        pumpStartTime = new Date(lastUpdatedTime).getTime();
-        // Trigger immediate update
-        updateTotalFlowDisplay();
+    // If running, ensure flow tracking is active
+    if (running && !flowUpdateInterval) {
+        // This is a resume scenario (page load with pump already running)
+        startFlowTracking(true);
     }
 
     // Update direction

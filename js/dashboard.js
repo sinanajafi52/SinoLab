@@ -1611,8 +1611,22 @@ function subscribeToDevice() {
         const data = snapshot.val();
         if (data) {
             console.log('📥 Loaded Volume Dispense settings:', data);
-            if (el.volumeInput && data.targetVolume) el.volumeInput.value = data.targetVolume;
-            if (el.volumeOffTime && data.offTime !== undefined) el.volumeOffTime.value = data.offTime / 1000;
+
+            // Calculate volume from onTime (new unified structure)
+            if (data.onTime && data.rpm) {
+                const mlPerRev = tubeConfig?.mlPerRev || 0;
+                if (mlPerRev > 0) {
+                    const onTimeSec = data.onTime / 1000;
+                    const flowRatePerSec = (data.rpm * mlPerRev) / 60;
+                    const calculatedVolume = onTimeSec * flowRatePerSec;
+                    if (el.volumeInput) el.volumeInput.value = calculatedVolume.toFixed(2);
+                }
+            }
+
+            // Load offTime
+            if (el.volumeOffTime && data.offTime !== undefined) {
+                el.volumeOffTime.value = data.offTime / 1000;
+            }
 
             // Set direction
             if (data.direction === 'CCW') {

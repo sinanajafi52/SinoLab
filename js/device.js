@@ -406,6 +406,7 @@ async function renderDeviceList(containerId = 'deviceList') {
                         inputMode: null,
                         currentRPM: 0,
                         currentFlowRate: null,
+                        pumpStartedAt: null,
                         acknowledged: false,
                         lastIssuedBy: Auth.getCurrentUserId(),
                         lastUpdated: new Date().toISOString()

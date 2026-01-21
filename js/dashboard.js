@@ -764,7 +764,6 @@ function updateFlowDisplay() {
 // ========================================
 // REAL-TIME TOTAL FLOW CALCULATION
 // ========================================
-let userStartedPump = false; // Track if we started the pump in this session
 
 function startFlowTracking(isResuming = false) {
     if (flowUpdateInterval) return; // Already tracking
@@ -772,20 +771,20 @@ function startFlowTracking(isResuming = false) {
     // Always reset session values
     sessionFlowMl = 0;
 
-    if (isResuming && liveStatus && liveStatus.lastUpdated) {
-        // Resuming a running pump on page load - use server time
-        const serverTime = new Date(liveStatus.lastUpdated).getTime();
+    if (isResuming && liveStatus && liveStatus.pumpStartedAt) {
+        // Resuming a running pump on page load - use saved pump start time
+        const pumpStartedTime = new Date(liveStatus.pumpStartedAt).getTime();
         const now = Date.now();
-        const elapsed = now - serverTime;
+        const elapsed = now - pumpStartedTime;
 
-        // Only use server time if it's reasonable (within last hour)
+        // Only use saved time if it's reasonable (within last 24 hours)
         // Otherwise, assume something is wrong and use current time
-        if (elapsed > 0 && elapsed < 3600000) {
-            pumpStartTime = serverTime;
-            console.log('📊 Resuming flow tracking from server time, elapsed:', Math.round(elapsed / 1000), 's');
+        if (elapsed > 0 && elapsed < 86400000) {
+            pumpStartTime = pumpStartedTime;
+            console.log('📊 Resuming flow tracking from pumpStartedAt, elapsed:', Math.round(elapsed / 1000), 's');
         } else {
             pumpStartTime = now;
-            console.log('📊 Server time too old, starting fresh');
+            console.log('📊 pumpStartedAt too old, starting fresh');
         }
     } else {
         // Fresh start - use current time
@@ -1100,6 +1099,7 @@ async function startPump() {
             currentRPM: rpmToUse,
             currentFlowRate: flowRateVal > 0 ? flowRateVal : null,
             direction: currentDirection,
+            pumpStartedAt: new Date().toISOString(), // For Total Flow calculation
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()
@@ -1134,6 +1134,7 @@ async function stopPump() {
             inputMode: null,
             currentRPM: 0,
             currentFlowRate: null,
+            pumpStartedAt: null, // Clear pump start time
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: new Date().toISOString()

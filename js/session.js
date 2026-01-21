@@ -98,6 +98,17 @@ async function claimSession(deviceId) {
         // Get current session
         const existingSession = await getDeviceSession(deviceId);
 
+        // DEBUG: Log session state
+        console.log('🔍 Session Debug:', {
+            deviceId,
+            existingSession,
+            currentUserUid: currentUser.uid,
+            currentUserEmail: currentUser.email,
+            isStale: existingSession ? isSessionStale(existingSession) : 'no session',
+            isMySession: existingSession ? isMySession(existingSession) : 'no session',
+            sessionAge: existingSession?.lastActive ? Math.round((Date.now() - existingSession.lastActive) / 1000) + 's' : 'N/A'
+        });
+
         // Check if there's an active session by another user
         if (existingSession && !isSessionStale(existingSession) && !isMySession(existingSession)) {
             // Another user has an active session
@@ -105,7 +116,7 @@ async function claimSession(deviceId) {
             console.log(`Session blocked: Device ${deviceId} is in use by ${blockedByEmail}`);
             return {
                 success: false,
-                message: `Device is currently in use by ${blockedByEmail}`,
+                message: `Device is currently in use by:\n${blockedByEmail}`,
                 blockedBy: blockedByEmail
             };
         }
@@ -374,6 +385,26 @@ window.Session = {
 
     // Cleanup
     cleanup
+};
+
+// Debug function - clear stuck session (call from console)
+window.forceReleaseSession = async function (deviceId) {
+    if (!deviceId) {
+        deviceId = Utils.getSavedDeviceId();
+    }
+    if (!deviceId) {
+        console.error('❌ No device ID provided or saved');
+        return;
+    }
+
+    console.log('🔧 Force releasing session for:', deviceId);
+    try {
+        await FirebaseApp.getDeviceRef(deviceId).child('session').remove();
+        console.log('✅ Session cleared! You can now access the device.');
+        Utils.showSuccess('Session cleared');
+    } catch (error) {
+        console.error('❌ Failed to clear session:', error);
+    }
 };
 
 console.log('Session module loaded');

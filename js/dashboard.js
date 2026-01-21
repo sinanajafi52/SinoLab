@@ -1524,7 +1524,7 @@ function subscribeToDevice() {
         const data = snapshot.val();
         if (data) {
             console.log('📥 Loaded Volume Dispense settings:', data);
-            if (el.volumeTarget && data.targetVolume) el.volumeTarget.value = data.targetVolume;
+            if (el.volumeInput && data.targetVolume) el.volumeInput.value = data.targetVolume;
             if (el.volumeOffTime && data.offTime !== undefined) el.volumeOffTime.value = data.offTime / 1000;
 
             // Set direction

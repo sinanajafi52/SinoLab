@@ -1475,10 +1475,41 @@ function subscribeToDevice() {
         liveStatus = snapshot.val() || {};
         updateLiveStatus();
 
-        // On first load, navigate to correct page based on activeMode
+        // On first load, navigate to correct page and populate Status form
         if (!hasInitialNavigated && liveStatus.activeMode) {
             hasInitialNavigated = true;
             navigateToActiveMode(liveStatus.activeMode);
+
+            // Populate Status page form fields from liveStatus
+            if (liveStatus.activeMode === 'STATUS' && liveStatus.currentRPM > 0) {
+                console.log('📥 Loading Status page values from liveStatus:', liveStatus);
+
+                // Set RPM
+                if (el.rpmInput && liveStatus.currentRPM) {
+                    el.rpmInput.value = liveStatus.currentRPM;
+                    currentRPM = liveStatus.currentRPM;
+                }
+                if (el.rpmSlider && liveStatus.currentRPM) {
+                    el.rpmSlider.value = liveStatus.currentRPM;
+                }
+
+                // Set Flow Rate (if in flow mode)
+                if (el.flowInput && liveStatus.currentFlowRate) {
+                    el.flowInput.value = liveStatus.currentFlowRate.toFixed(2);
+                    currentFlowRate = liveStatus.currentFlowRate;
+                }
+
+                // Set Direction
+                if (liveStatus.direction) {
+                    currentDirection = liveStatus.direction;
+                    updateDirectionDisplay();
+                }
+
+                // Set input mode display
+                if (liveStatus.inputMode) {
+                    updateInputModeDisplay();
+                }
+            }
         }
     });
 

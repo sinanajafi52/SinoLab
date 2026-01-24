@@ -771,6 +771,8 @@ function startFlowTracking(isResuming = false) {
     // Always reset session values
     sessionFlowMl = 0;
 
+    console.log('📊 startFlowTracking called, isResuming:', isResuming, 'pumpStartedAt:', liveStatus?.pumpStartedAt);
+
     if (isResuming && liveStatus && liveStatus.pumpStartedAt) {
         // Resuming a running pump on page load - use saved pump start time
         const pumpStartedTime = new Date(liveStatus.pumpStartedAt).getTime();
@@ -781,15 +783,15 @@ function startFlowTracking(isResuming = false) {
         // Otherwise, assume something is wrong and use current time
         if (elapsed > 0 && elapsed < 86400000) {
             pumpStartTime = pumpStartedTime;
-            console.log('📊 Resuming flow tracking from pumpStartedAt, elapsed:', Math.round(elapsed / 1000), 's');
+            console.log('📊 ✅ Using pumpStartedAt, elapsed:', Math.round(elapsed / 1000), 's, currentFlowRate:', currentFlowRate);
         } else {
             pumpStartTime = now;
-            console.log('📊 pumpStartedAt too old, starting fresh');
+            console.log('📊 ⚠️ pumpStartedAt too old or invalid, elapsed:', elapsed);
         }
     } else {
         // Fresh start - use current time
         pumpStartTime = Date.now();
-        console.log('📊 Starting flow tracking from now');
+        console.log('📊 Starting fresh (no pumpStartedAt found)');
     }
 
     // Update every 100ms for smooth display
@@ -1734,10 +1736,21 @@ function updateLiveStatus() {
     // If running, ensure flow tracking is active
     if (running && !flowUpdateInterval) {
         // This is a resume scenario (page load with pump already running)
-        // Ensure we have currentFlowRate from liveStatus for Total Flow calculation
+        console.log('📊 Resume detected - liveStatus:', {
+            pumpStartedAt: liveStatus.pumpStartedAt,
+            currentRPM: liveStatus.currentRPM,
+            currentFlowRate: liveStatus.currentFlowRate
+        });
+
+        // Calculate currentFlowRate from RPM if not directly available
         if (liveStatus.currentFlowRate && liveStatus.currentFlowRate > 0) {
             currentFlowRate = liveStatus.currentFlowRate;
+        } else if (liveStatus.currentRPM && tubeConfig?.mlPerRev > 0) {
+            // Calculate flow rate: RPM × mlPerRev = mL/min
+            currentFlowRate = liveStatus.currentRPM * tubeConfig.mlPerRev;
+            console.log('📊 Calculated currentFlowRate from RPM:', currentFlowRate);
         }
+
         startFlowTracking(true);
     }
 

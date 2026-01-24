@@ -69,6 +69,8 @@
 html {
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
+    overscroll-behavior: contain;
+    /* Prevent scroll bounce on mobile */
 }
 
 body {
@@ -77,6 +79,8 @@ body {
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
+    overscroll-behavior: contain;
+    /* Prevent scroll bounce on mobile */
 }
 
 /* ========================================
@@ -477,6 +481,9 @@ h3 {
     margin-left: var(--sidebar-width);
     min-height: 100vh;
     background: var(--bg-primary);
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    /* Smooth scrolling on iOS */
 }
 
 /* Dashboard Pages */

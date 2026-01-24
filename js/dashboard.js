@@ -773,25 +773,24 @@ function startFlowTracking(isResuming = false) {
 
     console.log('📊 startFlowTracking called, isResuming:', isResuming, 'pumpStartedAt:', liveStatus?.pumpStartedAt);
 
-    if (isResuming && liveStatus && liveStatus.pumpStartedAt) {
-        // Resuming a running pump on page load - use saved pump start time
+    // ALWAYS check for pumpStartedAt when pump is running - this handles resume automatically
+    if (isPumpRunning && liveStatus && liveStatus.pumpStartedAt) {
         const pumpStartedTime = new Date(liveStatus.pumpStartedAt).getTime();
         const now = Date.now();
         const elapsed = now - pumpStartedTime;
 
         // Only use saved time if it's reasonable (within last 24 hours)
-        // Otherwise, assume something is wrong and use current time
         if (elapsed > 0 && elapsed < 86400000) {
             pumpStartTime = pumpStartedTime;
             console.log('📊 ✅ Using pumpStartedAt, elapsed:', Math.round(elapsed / 1000), 's, currentFlowRate:', currentFlowRate);
         } else {
             pumpStartTime = now;
-            console.log('📊 ⚠️ pumpStartedAt too old or invalid, elapsed:', elapsed);
+            console.log('📊 ⚠️ pumpStartedAt too old, elapsed:', elapsed, 'ms');
         }
     } else {
         // Fresh start - use current time
         pumpStartTime = Date.now();
-        console.log('📊 Starting fresh (no pumpStartedAt found)');
+        console.log('📊 Starting fresh - isPumpRunning:', isPumpRunning, ', pumpStartedAt:', liveStatus?.pumpStartedAt);
     }
 
     // Update every 100ms for smooth display

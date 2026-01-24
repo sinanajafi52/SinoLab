@@ -1862,6 +1862,8 @@ h3 {
     .sidebar {
         transform: translateX(-100%);
         transition: transform var(--transition-normal);
+        padding-bottom: 80px;
+        /* Extra space for mobile browser navigation bar */
     }
 
     .sidebar.open {
@@ -1870,6 +1872,11 @@ h3 {
 
     .sidebar-overlay.active {
         display: block;
+    }
+
+    .sidebar-footer {
+        padding-bottom: 60px;
+        /* Extra padding for mobile */
     }
 
     .mobile-header {

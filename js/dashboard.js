@@ -867,7 +867,7 @@ function confirmTubeChange() {
 function showTubeChangeModal() {
     // Create modal backdrop
     const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop';
+    backdrop.className = 'modal-backdrop active';
     backdrop.id = 'tubeChangeModal';
     backdrop.innerHTML = `
         <div class="modal-content">

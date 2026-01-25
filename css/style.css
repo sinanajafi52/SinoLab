@@ -1877,7 +1877,7 @@ h3 {
     .sidebar {
         transform: translateX(-100%);
         transition: transform var(--transition-normal);
-        padding-bottom: 80px;
+        padding-bottom: 120px;
         /* Extra space for mobile browser navigation bar */
     }
 
@@ -1890,7 +1890,7 @@ h3 {
     }
 
     .sidebar-footer {
-        padding-bottom: 60px;
+        padding-bottom: 100px;
         /* Extra padding for mobile */
     }
 

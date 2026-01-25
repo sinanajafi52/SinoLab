@@ -3,67 +3,6 @@
  * Real-time pump control and monitoring
  */
 
-// DEBUG: Test Firebase write directly from console
-window.testFirebaseWrite = async function () {
-    const deviceId = Utils.getSavedDeviceId()?.trim();
-    console.log('🧪 Testing Firebase Write to device:', deviceId);
-
-    if (!deviceId) {
-        console.error('❌ No device ID found!');
-        return;
-    }
-
-    try {
-        const testPayload = {
-            testField: 'TEST_' + Date.now(),
-            testTime: new Date().toISOString()
-        };
-        console.log('📤 Writing test data:', testPayload);
-
-        await FirebaseApp.getDeviceRef(deviceId).child('_debugTest').set(testPayload);
-        console.log('✅ Firebase Write SUCCESS! Check _debugTest node in database.');
-        Utils.showSuccess('Firebase write test passed!');
-    } catch (error) {
-        console.error('❌ Firebase Write FAILED:', error);
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
-        Utils.showError('Firebase write failed: ' + error.message);
-    }
-};
-
-// DEBUG: Force update liveStatus
-window.forceUpdateStatus = async function (rpm = 100) {
-    const deviceId = Utils.getSavedDeviceId()?.trim();
-    console.log('🔧 Force updating liveStatus for device:', deviceId);
-
-    if (!deviceId) {
-        console.error('❌ No device ID!');
-        return;
-    }
-
-    try {
-        const payload = {
-            activeMode: 'STATUS',
-            inputMode: 'RPM',
-            currentRPM: rpm,
-            direction: 'CW',
-            acknowledged: false,
-            lastIssuedBy: Auth.getCurrentUserId() || 'debug',
-            lastUpdated: new Date().toISOString()
-        };
-        console.log('📤 Payload:', payload);
-
-        await FirebaseApp.getDeviceRef(deviceId).child('liveStatus').update(payload);
-        console.log('✅ liveStatus updated!');
-        Utils.showSuccess('Status updated successfully!');
-    } catch (error) {
-        console.error('❌ Update FAILED:', error);
-        Utils.showError('Update failed: ' + error.message);
-    }
-};
-
-console.log('🔧 Debug functions available: testFirebaseWrite(), forceUpdateStatus(rpm)');
-
 // ========================================
 // STATE
 // ========================================

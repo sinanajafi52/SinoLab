@@ -492,10 +492,14 @@ h3 {
     padding: var(--spacing-lg);
     max-width: 800px;
     margin: 0 auto;
+    overflow-anchor: auto;
+    /* Prevent scroll jumping when content updates */
 }
 
 .dashboard-page.active {
     display: block !important;
+    overflow-anchor: auto;
+    /* Prevent scroll jumping when content updates */
 }
 
 .page-header {

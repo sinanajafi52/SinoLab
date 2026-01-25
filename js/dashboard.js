@@ -722,16 +722,10 @@ function updateInputModeDisplay() {
             el.flowDisplayBox.classList.add('editable');
             if (el.flowInput) {
                 el.flowInput.classList.remove('hidden');
-                // Only set value and focus if user is NOT currently typing
+                // Only set value if user is NOT currently typing
                 if (!isFlowInputFocused) {
                     el.flowInput.value = targetFlow > 0 ? targetFlow : '';
-                    // Auto-focus only on first switch to flow mode
-                    setTimeout(() => {
-                        if (!isFlowInputFocused) {
-                            el.flowInput.focus();
-                            isFlowInputFocused = true;
-                        }
-                    }, 50);
+                    // Note: Removed auto-focus to prevent scroll jumping on mobile
                 }
             }
             if (el.flowValue) el.flowValue.classList.add('hidden');
@@ -840,9 +834,7 @@ function updateTotalFlowDisplay() {
     if (el.totalFlowValue) {
         el.totalFlowValue.textContent = sessionLiters.toFixed(2);
     }
-
-    // Update runtime display as well
-    updateTubeMaintenanceUI();
+    // Note: updateTubeMaintenanceUI has its own interval, no need to call here
 }
 
 // ========================================

@@ -493,13 +493,15 @@ h3 {
     max-width: 800px;
     margin: 0 auto;
     overflow-anchor: auto;
-    /* Prevent scroll jumping when content updates */
+    touch-action: pan-y;
+    /* Only allow vertical scrolling on touch */
 }
 
 .dashboard-page.active {
     display: block !important;
     overflow-anchor: auto;
-    /* Prevent scroll jumping when content updates */
+    touch-action: pan-y;
+    /* Only allow vertical scrolling on touch */
 }
 
 .page-header {
@@ -662,6 +664,8 @@ h3 {
     background: linear-gradient(to right, var(--accent-cyan) 0%, var(--accent-cyan) var(--slider-percent, 25%), var(--bg-tertiary) var(--slider-percent, 25%), var(--bg-tertiary) 100%);
     border-radius: var(--border-radius-full);
     margin-bottom: var(--spacing-xs);
+    touch-action: none;
+    /* Prevent scroll interference when using slider */
 }
 
 .rpm-slider::-webkit-slider-thumb {

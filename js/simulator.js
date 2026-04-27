@@ -66,7 +66,7 @@ const Simulator = {
                 direction: "CW",
                 acknowledged: true,
                 lastIssuedBy: "simulator",
-                lastUpdated: new Date().toISOString()
+                lastUpdated: Date.now()
             }
         };
 

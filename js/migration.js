@@ -37,7 +37,7 @@ window.Migration = {
      */
     async performMigration(ref, data) {
         const updates = {};
-        const now = new Date().toISOString();
+        const now = Date.now();
 
         // 1. Move Settings -> tubeConfig
         if (data.settings) {

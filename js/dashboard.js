@@ -932,7 +932,7 @@ async function startPump() {
             direction: currentDirection,
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: new Date().toISOString()
+            lastUpdated: Date.now()
         });
 
         Utils.showSuccess('Pump started');
@@ -955,7 +955,7 @@ async function stopPump() {
             activeMode: 'NONE',
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: new Date().toISOString()
+            lastUpdated: Date.now()
         });
 
         Utils.showSuccess('Pump stopped');
@@ -1170,7 +1170,7 @@ async function dispenseRpmBased() {
             activeMode: 'RPM',
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: new Date().toISOString()
+            lastUpdated: Date.now()
         });
 
         // Optimistic UI update
@@ -1269,7 +1269,7 @@ async function dispenseVolume() {
             activeMode: 'VOLUME',
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: new Date().toISOString()
+            lastUpdated: Date.now()
         });
 
         Utils.showSuccess(`Dispensing ${volume} mL`);

@@ -38,60 +38,35 @@ const Simulator = {
     async initializeData() {
         console.log('📦 Initializing Database Structure...');
 
-        try {
-            const snapshot = await this.deviceRef.once('value');
-            const currentData = snapshot.val();
-
-            if (!currentData) {
-                // First time initialization - Set everything
-                const initialData = {
-                    identity: {
-                        mac: "AA:BB:CC:DD:EE:FF",
-                        firmware: "v-SIMULATOR"
-                    },
-                    tubeConfig: {
-                        tubeName: "2mm",
-                        mlPerRev: 1.5,
-                        calibrationType: "basic",
-                        lastCalibrated: Date.now(),
-                        antiDrip: true
-                    },
-                    connection: {
-                        online: true,
-                        ip: "127.0.0.1 (Sim)",
-                        lastSeen: Date.now()
-                    },
-                    liveStatus: {
-                        activeMode: "NONE",
-                        inputMode: null, // Allow it to be null
-                        currentRPM: 0,
-                        direction: "CW",
-                        acknowledged: true,
-                        lastIssuedBy: "simulator",
-                        lastUpdated: new Date().toISOString()
-                    }
-                };
-                await this.deviceRef.set(initialData);
-                console.log('✨ Fresh device initialized.');
-            } else {
-                // Data exists - Just ensure connection is online and update UI inputs
-                console.log('💾 Existing data found. Creating/Updating connection only.');
-                await this.deviceRef.child('connection').update({
-                    online: true,
-                    ip: "127.0.0.1 (Sim)",
-                    lastSeen: Date.now()
-                });
-
-                // Optional: Ensure tube config exists if missing
-                if (!currentData.tubeConfig) {
-                    await this.deviceRef.child('tubeConfig').set({
-                        tubeName: "2mm",
-                        mlPerRev: 1.5,
-                        calibrationType: "basic",
-                        lastCalibrated: Date.now(),
-                        antiDrip: true
-                    });
-                }
+        // Only set if not exists, or update vital parts to ensure consistency
+        const initialData = {
+            identity: {
+                mac: "AA:BB:CC:DD:EE:FF",
+                firmware: "v-SIMULATOR"
+            },
+            // Default config
+            tubeConfig: {
+                tubeName: "2mm",
+                mlPerRev: 1.5,
+                calibrationType: "basic",
+                lastCalibrated: Date.now(),
+                antiDrip: true
+            },
+            // Ensure connection node exists
+            connection: {
+                online: true,
+                ip: "127.0.0.1 (Sim)",
+                lastSeen: Date.now()
+            },
+            // Reset status
+            liveStatus: {
+                activeMode: "NONE",
+                inputMode: "RPM",
+                currentRPM: 0,
+                direction: "CW",
+                acknowledged: true,
+                lastIssuedBy: "simulator",
+                lastUpdated: Date.now()
             }
 
             // Load values into UI inputs (from current or fresh data)

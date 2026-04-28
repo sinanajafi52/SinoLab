@@ -1034,11 +1034,8 @@ async function startPump() {
             pumpStartedAt: new Date().toISOString(), // For Total Flow calculation
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: new Date().toISOString()
-        };
-        console.log('🚀 Sending Start Command:', payload);
-
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update(payload);
+            lastUpdated: Date.now()
+        });
 
         Utils.showSuccess('Pump started');
     } catch (error) {
@@ -1069,11 +1066,8 @@ async function stopPump() {
             pumpStartedAt: null, // Clear pump start time
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: new Date().toISOString()
-        };
-        console.log('🛑 Sending Stop Command:', payload);
-
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update(payload);
+            lastUpdated: Date.now()
+        });
 
         Utils.showSuccess('Pump stopped');
     } catch (error) {
@@ -1289,7 +1283,7 @@ async function dispenseRpmBased() {
             inputMode: null, // Clear inputMode to avoid conflict
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: new Date().toISOString()
+            lastUpdated: Date.now()
         });
 
         Utils.showSuccess(`Running at ${rpm} RPM for ${onTime}s`);
@@ -1425,7 +1419,7 @@ async function executeVolumeDispense(rpm, onTimeSec, offTimeSec, direction, volu
             inputMode: null,
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: new Date().toISOString()
+            lastUpdated: Date.now()
         });
 
         Utils.showSuccess(`Dispensing ${volume.toFixed(2)} mL`);

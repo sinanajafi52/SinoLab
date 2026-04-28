@@ -68,15 +68,20 @@ const Simulator = {
                 lastIssuedBy: "simulator",
                 lastUpdated: Date.now()
             }
-        };
 
-        // Use set() instead of update() to completely reset liveStatus
-        await this.deviceRef.set(initialData);
+            // Load values into UI inputs (from current or fresh data)
+            const freshSnap = await this.deviceRef.once('value');
+            const data = freshSnap.val();
 
-        // Load initial values into inputs
-        document.getElementById('simTubeName').value = "2mm";
-        document.getElementById('simMlPerRev').value = 1.5;
-        document.getElementById('simAntiDrip').checked = true;
+            if (data.tubeConfig) {
+                if (document.getElementById('simTubeName')) document.getElementById('simTubeName').value = data.tubeConfig.tubeName || "2mm";
+                if (document.getElementById('simMlPerRev')) document.getElementById('simMlPerRev').value = data.tubeConfig.mlPerRev || 1.5;
+                if (document.getElementById('simAntiDrip')) document.getElementById('simAntiDrip').checked = data.tubeConfig.antiDrip === true;
+            }
+
+        } catch (error) {
+            console.error('Init Error:', error);
+        }
     },
 
     startHeartbeat() {

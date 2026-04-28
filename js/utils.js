@@ -412,6 +412,93 @@ function showWarning(message) {
     showToast(message, 'warning');
 }
 
+/**
+ * Show a blocking error popup (centered modal)
+ * Use for important errors that need user attention (e.g., access denied)
+ * @param {string} title - Error title
+ * @param {string} message - Error message
+ * @param {Function} onClose - Callback when closed
+ */
+function showBlockingError(title, message, onClose = null) {
+    // Remove existing if any
+    const existing = document.querySelector('.blocking-error-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'blocking-error-overlay';
+    overlay.innerHTML = `
+        <div class="blocking-error-content">
+            <div class="blocking-error-icon">⛔</div>
+            <h3 class="blocking-error-title">${title}</h3>
+            <p class="blocking-error-message">${message}</p>
+            <button class="blocking-error-btn">OK</button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const closeBtn = overlay.querySelector('.blocking-error-btn');
+    closeBtn.addEventListener('click', () => {
+        overlay.remove();
+        if (onClose) onClose();
+    });
+
+    // Also close on overlay click
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.remove();
+            if (onClose) onClose();
+        }
+    });
+}
+
+/**
+ * Show volume adjustment popup for Volume Dispense
+ * @param {number} requestedVolume - Volume user requested
+ * @param {number} actualVolume - Volume that will actually be dispensed
+ * @param {number} runTime - Time in seconds
+ * @param {Function} onConfirm - Callback when user confirms
+ * @param {Function} onCancel - Callback when user cancels
+ */
+function showVolumeAdjustment(requestedVolume, actualVolume, runTime, onConfirm, onCancel = null) {
+    // Remove existing if any
+    const existing = document.querySelector('.volume-adjust-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'volume-adjust-overlay';
+    overlay.innerHTML = `
+        <div class="volume-adjust-content">
+            <div class="volume-adjust-icon">⚠️</div>
+            <h3 class="volume-adjust-title">Volume Adjustment</h3>
+            <div class="volume-adjust-details">
+                <p>Your requested: <strong>${requestedVolume.toFixed(1)} mL</strong></p>
+                <p>Device will dispense: <strong>${actualVolume.toFixed(2)} mL</strong></p>
+                <p class="volume-adjust-time">Run time: ${runTime.toFixed(1)} sec</p>
+            </div>
+            <div class="volume-adjust-buttons">
+                <button class="volume-adjust-cancel">Cancel</button>
+                <button class="volume-adjust-confirm">OK, Use ${actualVolume.toFixed(2)} mL</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const cancelBtn = overlay.querySelector('.volume-adjust-cancel');
+    const confirmBtn = overlay.querySelector('.volume-adjust-confirm');
+
+    cancelBtn.addEventListener('click', () => {
+        overlay.remove();
+        if (onCancel) onCancel();
+    });
+
+    confirmBtn.addEventListener('click', () => {
+        overlay.remove();
+        if (onConfirm) onConfirm(actualVolume);
+    });
+}
+
 // ========================================
 // LOADING STATE
 // ========================================
@@ -567,6 +654,8 @@ window.Utils = {
     showSuccess,
     showError,
     showWarning,
+    showBlockingError,
+    showVolumeAdjustment,
 
     // Loading
     showLoading,

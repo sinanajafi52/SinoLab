@@ -23,6 +23,10 @@ let targetFlow = 0;  // Separate flow value
 let inputMode = 'rpm';  // 'rpm' or 'flow' - which control is active
 let isFlowInputFocused = false;  // Track if user is typing in flow input
 let dispenseMode = 'rpm'; // 'rpm' or 'volume'
+let flowUpdateInterval = null; // Flow tracking interval
+let pumpStartTime = null; // Timestamp when pump started
+let sessionFlowMl = 0; // Total flow in current session (mL)
+let currentFlowRate = 0; // Current flow rate (mL/min)
 
 // Firebase listeners
 let liveStatusListener = null;
@@ -36,6 +40,7 @@ let activeControllerListener = null;
 let activeControllerInterval = null; // Heartbeat
 let currentAuthUser = null;
 let imActiveController = false;
+let hasInitialNavigated = false; // Track if we've navigated based on activeMode on first load
 
 // Control state (Removed controlMode as it's no longer used)
 
@@ -48,7 +53,7 @@ const el = {};
 async function initDashboard() {
     console.log('Initializing dashboard...');
 
-    currentDeviceId = Utils.getSavedDeviceId();
+    currentDeviceId = Utils.getSavedDeviceId()?.trim();
     console.log('📱 Device ID:', currentDeviceId);
 
     if (!currentDeviceId) {
@@ -74,6 +79,18 @@ async function initDashboard() {
         console.log('Session verified, initializing UI...');
 
         cacheElements();
+
+        // Force hide legacy lock modal just in case
+        if (el.userLockModal) {
+            el.userLockModal.classList.remove('active');
+            el.userLockModal.style.display = 'none';
+        }
+
+        // Show Leave Device button since we have the session
+        if (el.leaveDeviceBtn) {
+            el.leaveDeviceBtn.style.display = 'flex';
+        }
+
         setupEventHandlers();
         setupNavigation();
 
@@ -185,6 +202,7 @@ function cacheElements() {
     el.lockUserEmail = document.getElementById('lockUserEmail');
     el.exitDashboardBtn = document.getElementById('exitDashboardBtn');
     el.forceUnlockBtn = document.getElementById('forceUnlockBtn');
+    el.leaveDeviceBtn = document.getElementById('leaveDeviceBtn');
     el.leaveDeviceBtn = document.getElementById('leaveDeviceBtn');
 }
 
@@ -313,11 +331,27 @@ function setupEventHandlers() {
         });
         el.flowInput.addEventListener('blur', () => {
             isFlowInputFocused = false;
-            // Validate on blur
-            const val = Math.max(0, parseFloat(el.flowInput.value) || 0);
+            // Validate and snap to nearest RPM
+            let val = Math.max(0, parseFloat(el.flowInput.value) || 0);
+
+            // If calibrated, snap to nearest RPM
+            const mlPerRev = tubeConfig?.mlPerRev || 0;
+            if (mlPerRev > 0 && val > 0) {
+                // Calculate nearest RPM
+                let calculatedRPM = Math.round(val / mlPerRev);
+                // Clamp RPM
+                calculatedRPM = Math.min(400, Math.max(0, calculatedRPM));
+
+                // Update targetRPM
+                setRPM(calculatedRPM);
+
+                // Recalculate exact flow based on snapped RPM
+                val = calculatedRPM * mlPerRev;
+            }
+
             targetFlow = val;
             if (val > 0) {
-                el.flowInput.value = val;
+                el.flowInput.value = val.toFixed(2);
             }
         });
         el.flowInput.addEventListener('input', (e) => {
@@ -369,16 +403,14 @@ function setupEventHandlers() {
     }
 
     // Leave Device (Active Release)
+    // Leave Device (Active Release)
     if (el.leaveDeviceBtn) {
         el.leaveDeviceBtn.addEventListener('click', async () => {
-            if (!currentDeviceId) return;
-            Utils.showLoading('Releasing control...');
-            try {
-                // Remove lock explicitly
-                const ref = FirebaseApp.getDeviceRef(currentDeviceId).child('activeController');
-                await ref.remove();
-            } catch (e) { console.error(e); }
-            Utils.navigateTo('device.html');
+            if (confirm('Are you sure you want to leave this device?')) {
+                Utils.showLoading('Leaving device...');
+                await Session.releaseSession(currentDeviceId);
+                Utils.navigateTo('device.html');
+            }
         });
     }
 
@@ -390,15 +422,9 @@ function setupEventHandlers() {
             if (confirm('Are you sure? This will kick out any other user controlling this device.')) {
                 Utils.showLoading('Force unlocking...');
                 try {
-                    const ref = FirebaseApp.getDeviceRef(currentDeviceId).child('activeController');
-                    await ref.set({
-                        uid: currentAuthUser.uid,
-                        email: currentAuthUser.email || 'Unknown',
-                        startTime: Date.now(),
-                        lastActive: Date.now()
-                    });
-                    handleControllerLock(false);
-                    Utils.hideLoading();
+                    // Use Session module to force claim
+                    await Session.claimSession(currentDeviceId);
+                    window.location.reload(); // Refresh to init session properly
                 } catch (e) {
                     console.error('Force unlock failed', e);
                     Utils.showError('Unlock failed: ' + e.message);
@@ -490,6 +516,63 @@ function showRunningLockMessage() {
     }
 }
 
+/**
+ * Navigate to the appropriate page based on activeMode
+ * STATUS/NONE → Status page
+ * RPM → Dispense page with RPM tab
+ * VOLUME → Dispense page with Volume tab
+ */
+function navigateToActiveMode(activeMode) {
+    const navItems = document.querySelectorAll('.sidebar-nav-item');
+    const pages = document.querySelectorAll('.dashboard-page');
+
+    // Default to status page
+    let targetPage = 'status';
+    let dispenseTab = null;
+
+    if (activeMode === 'RPM') {
+        targetPage = 'dispense';
+        dispenseTab = 'rpm';
+    } else if (activeMode === 'VOLUME') {
+        targetPage = 'dispense';
+        dispenseTab = 'volume';
+    }
+    // STATUS and NONE stay on status page
+
+    // Update nav active state
+    navItems.forEach(nav => {
+        nav.classList.remove('active');
+        if (nav.dataset.page === targetPage) {
+            nav.classList.add('active');
+        }
+    });
+
+    // Show target page
+    pages.forEach(p => p.classList.remove('active'));
+    const targetPageEl = document.getElementById(targetPage + 'Page');
+    if (targetPageEl) targetPageEl.classList.add('active');
+
+    // If dispense page, also switch to correct tab
+    if (dispenseTab) {
+        // Use a slight delay to ensure elements are ready
+        setTimeout(() => {
+            if (dispenseTab === 'rpm') {
+                if (el.rpmModeTab) el.rpmModeTab.classList.add('active');
+                if (el.volumeModeTab) el.volumeModeTab.classList.remove('active');
+                if (el.rpmDispensePanel) el.rpmDispensePanel.classList.add('active');
+                if (el.volumeDispensePanel) el.volumeDispensePanel.classList.remove('active');
+            } else {
+                if (el.rpmModeTab) el.rpmModeTab.classList.remove('active');
+                if (el.volumeModeTab) el.volumeModeTab.classList.add('active');
+                if (el.rpmDispensePanel) el.rpmDispensePanel.classList.remove('active');
+                if (el.volumeDispensePanel) el.volumeDispensePanel.classList.add('active');
+            }
+        }, 100);
+    }
+
+    console.log(`Navigated to ${targetPage} page${dispenseTab ? ` (${dispenseTab} tab)` : ''} based on activeMode: ${activeMode}`);
+}
+
 // ========================================
 // RPM CONTROL
 // ========================================
@@ -578,16 +661,10 @@ function updateInputModeDisplay() {
             el.flowDisplayBox.classList.add('editable');
             if (el.flowInput) {
                 el.flowInput.classList.remove('hidden');
-                // Only set value and focus if user is NOT currently typing
+                // Only set value if user is NOT currently typing
                 if (!isFlowInputFocused) {
                     el.flowInput.value = targetFlow > 0 ? targetFlow : '';
-                    // Auto-focus only on first switch to flow mode
-                    setTimeout(() => {
-                        if (!isFlowInputFocused) {
-                            el.flowInput.focus();
-                            isFlowInputFocused = true;
-                        }
-                    }, 50);
+                    // Note: Removed auto-focus to prevent scroll jumping on mobile
                 }
             }
             if (el.flowValue) el.flowValue.classList.add('hidden');
@@ -620,11 +697,34 @@ function updateFlowDisplay() {
 // ========================================
 // REAL-TIME TOTAL FLOW CALCULATION
 // ========================================
-function startFlowTracking() {
+
+function startFlowTracking(isResuming = false) {
     if (flowUpdateInterval) return; // Already tracking
 
-    pumpStartTime = Date.now();
+    // Always reset session values
     sessionFlowMl = 0;
+
+    console.log('📊 startFlowTracking called, isResuming:', isResuming, 'pumpStartedAt:', liveStatus?.pumpStartedAt);
+
+    // ALWAYS check for pumpStartedAt when pump is running - this handles resume automatically
+    if (isPumpRunning && liveStatus && liveStatus.pumpStartedAt) {
+        const pumpStartedTime = new Date(liveStatus.pumpStartedAt).getTime();
+        const now = Date.now();
+        const elapsed = now - pumpStartedTime;
+
+        // Only use saved time if it's reasonable (within last 24 hours)
+        if (elapsed > 0 && elapsed < 86400000) {
+            pumpStartTime = pumpStartedTime;
+            console.log('📊 ✅ Using pumpStartedAt, elapsed:', Math.round(elapsed / 1000), 's, currentFlowRate:', currentFlowRate);
+        } else {
+            pumpStartTime = now;
+            console.log('📊 ⚠️ pumpStartedAt too old, elapsed:', elapsed, 'ms');
+        }
+    } else {
+        // Fresh start - use current time
+        pumpStartTime = Date.now();
+        console.log('📊 Starting fresh - isPumpRunning:', isPumpRunning, ', pumpStartedAt:', liveStatus?.pumpStartedAt);
+    }
 
     // Update every 100ms for smooth display
     flowUpdateInterval = setInterval(() => {
@@ -668,15 +768,12 @@ function updateTotalFlowDisplay() {
     // Total mL = flow rate (mL/min) * time (min)
     sessionFlowMl = currentFlowRate * elapsedMin;
 
-    // Convert to Liters and display with 3 decimals
+    // Convert to Liters and display with 2 decimal places
     const sessionLiters = sessionFlowMl / 1000;
-
     if (el.totalFlowValue) {
         el.totalFlowValue.textContent = sessionLiters.toFixed(2);
     }
-
-    // Update runtime display as well
-    updateTubeMaintenanceUI();
+    // Note: updateTubeMaintenanceUI has its own interval, no need to call here
 }
 
 // ========================================
@@ -701,7 +798,7 @@ function confirmTubeChange() {
 function showTubeChangeModal() {
     // Create modal backdrop
     const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop';
+    backdrop.className = 'modal-backdrop active';
     backdrop.id = 'tubeChangeModal';
     backdrop.innerHTML = `
         <div class="modal-content">
@@ -923,13 +1020,18 @@ async function startPump() {
     // Optimistic UI update first for responsiveness
     setPumpRunning(true);
 
+    // Start flow tracking from 0 (not resuming)
+    stopFlowTracking(); // Clear any existing tracking first
+    startFlowTracking(false);
+
     try {
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+        const payload = {
             activeMode: 'STATUS',
             inputMode: inputMode.toUpperCase(),
             currentRPM: rpmToUse,
             currentFlowRate: flowRateVal > 0 ? flowRateVal : null,
             direction: currentDirection,
+            pumpStartedAt: new Date().toISOString(), // For Total Flow calculation
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: Date.now()
@@ -940,6 +1042,9 @@ async function startPump() {
         console.error('Error starting pump:', error);
         // Revert UI on error
         setPumpRunning(false);
+        // Stop tracking if start failed
+        stopFlowTracking();
+        stopRuntimeTracking();
         Utils.showError('Failed to start pump. Check connection.');
     }
 }
@@ -951,8 +1056,14 @@ async function stopPump() {
     setPumpRunning(false);
 
     try {
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
+        // Clear operational values for safety (Defense in Depth)
+        // Direction is preserved as it's a user preference
+        const payload = {
             activeMode: 'NONE',
+            inputMode: null,
+            currentRPM: 0,
+            currentFlowRate: null,
+            pumpStartedAt: null, // Clear pump start time
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: Date.now()
@@ -1154,9 +1265,10 @@ async function dispenseRpmBased() {
         return;
     }
 
-    try {
-        Utils.showLoading('Starting dispense...');
+    // Optimistic UI update
+    setPumpRunning(true);
 
+    try {
         // 1. Set parameters
         await FirebaseApp.getDeviceRef(currentDeviceId).child('rpmDispense').set({
             rpm: rpm,
@@ -1168,19 +1280,15 @@ async function dispenseRpmBased() {
         // 2. Trigger action
         await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
             activeMode: 'RPM',
+            inputMode: null, // Clear inputMode to avoid conflict
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: Date.now()
         });
 
-        // Optimistic UI update
-        setPumpRunning(true);
-
-        Utils.hideLoading();
         Utils.showSuccess(`Running at ${rpm} RPM for ${onTime}s`);
     } catch (error) {
         setPumpRunning(false);
-        Utils.hideLoading();
         console.error('Error starting dispense:', error);
         Utils.showError('Failed to start dispense');
     }
@@ -1190,7 +1298,7 @@ async function dispenseRpmBased() {
 // VOLUME-BASED DISPENSE
 // ========================================
 // Default RPM for volume-based dispense (auto-calculated from calibration)
-const VOLUME_DISPENSE_RPM = 200;
+const VOLUME_DISPENSE_RPM = 120; // Fixed RPM for volume dispense
 
 function updateEstimatedTime() {
     if (!el.estimatedTime) return;
@@ -1239,11 +1347,11 @@ async function dispenseVolume() {
         return;
     }
 
-    const volume = parseFloat(el.volumeInput?.value) || 0;
+    const requestedVolume = parseFloat(el.volumeInput?.value) || 0;
     const offTime = parseFloat(el.volumeOffTime?.value) || 0;
     const direction = el.volumeDirCCW?.classList.contains('active') ? 'CCW' : 'CW';
 
-    if (volume <= 0) {
+    if (requestedVolume <= 0) {
         Utils.showWarning('Please enter a valid volume');
         return;
     }
@@ -1253,26 +1361,68 @@ async function dispenseVolume() {
         return;
     }
 
+    // Constants
+    const VOLUME_DISPENSE_RPM = 120;
+    const mlPerRev = tubeConfig?.mlPerRev || 0;
+
+    // Calculate flow rate and time
+    const flowRatePerSec = (VOLUME_DISPENSE_RPM * mlPerRev) / 60; // mL per second
+    const rawOnTimeSec = requestedVolume / flowRatePerSec;
+
+    // Round to 0.1 second precision
+    const roundedOnTimeSec = Math.round(rawOnTimeSec * 10) / 10;
+
+    // Calculate actual volume that will be dispensed
+    const actualVolume = roundedOnTimeSec * flowRatePerSec;
+
+    // Check if adjustment is needed (more than 0.01 mL difference)
+    const needsAdjustment = Math.abs(actualVolume - requestedVolume) > 0.01;
+
+    if (needsAdjustment) {
+        // Show adjustment popup
+        Utils.showVolumeAdjustment(
+            requestedVolume,
+            actualVolume,
+            roundedOnTimeSec,
+            (confirmedVolume) => {
+                // User confirmed - update input and proceed
+                if (el.volumeInput) {
+                    el.volumeInput.value = confirmedVolume.toFixed(2);
+                }
+                executeVolumeDispense(VOLUME_DISPENSE_RPM, roundedOnTimeSec, offTime, direction, confirmedVolume);
+            },
+            null // onCancel - do nothing
+        );
+    } else {
+        // No adjustment needed - proceed directly
+        executeVolumeDispense(VOLUME_DISPENSE_RPM, roundedOnTimeSec, offTime, direction, requestedVolume);
+    }
+}
+
+async function executeVolumeDispense(rpm, onTimeSec, offTimeSec, direction, volume) {
     // Optimistic UI update first
     setPumpRunning(true);
 
     try {
-        // 1. Set parameters
+        // Save with unified structure (same as rpmDispense)
         await FirebaseApp.getDeviceRef(currentDeviceId).child('volumeDispense').set({
-            targetVolume: volume,
-            offTime: offTime * 1000, // Convert to ms
+            rpm: rpm,
+            onTime: Math.round(onTimeSec * 1000), // Convert to ms
+            offTime: Math.round(offTimeSec * 1000), // Convert to ms
             direction: direction
         });
 
-        // 2. Trigger action
+        // Trigger action
         await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
             activeMode: 'VOLUME',
+            currentRPM: rpm,
+            inputMode: null,
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: Date.now()
         });
 
-        Utils.showSuccess(`Dispensing ${volume} mL`);
+        Utils.showSuccess(`Dispensing ${volume.toFixed(2)} mL`);
     } catch (error) {
         console.error('Error dispensing volume:', error);
         setPumpRunning(false);
@@ -1292,6 +1442,54 @@ function subscribeToDevice() {
     liveStatusListener = deviceRef.child('liveStatus').on('value', (snapshot) => {
         liveStatus = snapshot.val() || {};
         updateLiveStatus();
+
+        // On first load, navigate to correct page and populate Status form
+        if (!hasInitialNavigated && liveStatus.activeMode) {
+            hasInitialNavigated = true;
+            navigateToActiveMode(liveStatus.activeMode);
+
+            // Populate Status page form fields from liveStatus
+            if (liveStatus.activeMode === 'STATUS' && liveStatus.currentRPM > 0) {
+                console.log('📥 Loading Status page values from liveStatus:', liveStatus);
+
+                // Set input mode first (RPM or FLOW)
+                if (liveStatus.inputMode) {
+                    inputMode = liveStatus.inputMode.toLowerCase();
+                    updateInputModeDisplay();
+                }
+
+                // Set RPM (always, even if in flow mode - this is the calculated RPM)
+                if (liveStatus.currentRPM) {
+                    currentRPM = liveStatus.currentRPM;
+                    targetRPM = liveStatus.currentRPM;
+
+                    if (el.rpmInput) el.rpmInput.value = liveStatus.currentRPM;
+                    if (el.rpmSlider) el.rpmSlider.value = liveStatus.currentRPM;
+                }
+
+                // Set Flow Rate
+                if (liveStatus.currentFlowRate && liveStatus.currentFlowRate > 0) {
+                    currentFlowRate = liveStatus.currentFlowRate;
+                    targetFlow = liveStatus.currentFlowRate;
+
+                    // Update flow display value (the large number)
+                    if (el.flowValue) {
+                        el.flowValue.textContent = liveStatus.currentFlowRate.toFixed(2);
+                    }
+
+                    // Update flow input field
+                    if (el.flowInput) {
+                        el.flowInput.value = liveStatus.currentFlowRate.toFixed(2);
+                    }
+                }
+
+                // Set Direction
+                if (liveStatus.direction) {
+                    currentDirection = liveStatus.direction;
+                    updateDirectionDisplay();
+                }
+            }
+        }
     });
 
     // Tube Config updates (Settings)
@@ -1312,6 +1510,63 @@ function subscribeToDevice() {
         maintenance = snapshot.val() || {};
         updateMaintenanceInfo();
         updateTubeMaintenanceUI();
+    });
+
+    // RPM Dispense settings - load and populate form
+    deviceRef.child('rpmDispense').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            console.log('📥 Loaded RPM Dispense settings:', data);
+            if (el.dispenseRpmInput && data.rpm) el.dispenseRpmInput.value = data.rpm;
+            if (el.dispenseRpmSlider && data.rpm) el.dispenseRpmSlider.value = data.rpm;
+            if (el.dispenseOnTime && data.onTime !== undefined) el.dispenseOnTime.value = data.onTime / 1000; // Convert ms to seconds
+            if (el.dispenseOffTime && data.offTime !== undefined) el.dispenseOffTime.value = data.offTime / 1000;
+
+            // Set direction
+            if (data.direction === 'CCW') {
+                if (el.dispenseRpmDirCCW) el.dispenseRpmDirCCW.classList.add('active');
+                if (el.dispenseRpmDirCW) el.dispenseRpmDirCW.classList.remove('active');
+            } else {
+                if (el.dispenseRpmDirCW) el.dispenseRpmDirCW.classList.add('active');
+                if (el.dispenseRpmDirCCW) el.dispenseRpmDirCCW.classList.remove('active');
+            }
+        }
+    });
+
+    // Volume Dispense settings - load and populate form
+    deviceRef.child('volumeDispense').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            console.log('📥 Loaded Volume Dispense settings:', data);
+
+            // Calculate volume from onTime (new unified structure)
+            if (data.onTime && data.rpm) {
+                const mlPerRev = tubeConfig?.mlPerRev || 0;
+                if (mlPerRev > 0) {
+                    const onTimeSec = data.onTime / 1000;
+                    const flowRatePerSec = (data.rpm * mlPerRev) / 60;
+                    const calculatedVolume = onTimeSec * flowRatePerSec;
+                    if (el.volumeInput) el.volumeInput.value = calculatedVolume.toFixed(2);
+                }
+            }
+
+            // Load offTime
+            if (el.volumeOffTime && data.offTime !== undefined) {
+                el.volumeOffTime.value = data.offTime / 1000;
+            }
+
+            // Set direction
+            if (data.direction === 'CCW') {
+                if (el.volumeDirCCW) el.volumeDirCCW.classList.add('active');
+                if (el.volumeDirCW) el.volumeDirCW.classList.remove('active');
+            } else {
+                if (el.volumeDirCW) el.volumeDirCW.classList.add('active');
+                if (el.volumeDirCCW) el.volumeDirCCW.classList.remove('active');
+            }
+
+            // Recalculate estimated time with loaded values
+            updateEstimatedTime();
+        }
     });
 
     // Connection updates
@@ -1375,8 +1630,25 @@ function updateLiveStatus() {
         hideButtonLoading();
     }
 
+    // STALE STATE CHECK
+    const STALE_THRESHOLD = 30 * 60 * 1000; // 30 minutes
+    const lastUpdatedTime = liveStatus.lastUpdated || liveStatus.updatedAt;
+    let isStale = false;
+
+    if (lastUpdatedTime) {
+        const diff = Date.now() - new Date(lastUpdatedTime).getTime();
+        if (diff > STALE_THRESHOLD) {
+            isStale = true;
+            console.warn('⚠️ Stale liveStatus detected. Treating as STOPPED.');
+        }
+    }
+
     // Determine pump running state from activeMode
-    const running = liveStatus.activeMode && liveStatus.activeMode !== 'NONE';
+    // If stale, assume pump is NOT running regardless of activeMode
+    let running = (liveStatus.activeMode && liveStatus.activeMode !== 'NONE');
+    if (isStale) {
+        running = false;
+    }
 
     // Check connection validity (using separate connection state)
     if (connection && !connection.online) {
@@ -1385,22 +1657,41 @@ function updateLiveStatus() {
         setPumpRunning(running);
     }
 
+    // If running, ensure flow tracking is active
+    if (running && !flowUpdateInterval) {
+        // This is a resume scenario (page load with pump already running)
+        console.log('📊 Resume detected - liveStatus:', {
+            pumpStartedAt: liveStatus.pumpStartedAt,
+            currentRPM: liveStatus.currentRPM,
+            currentFlowRate: liveStatus.currentFlowRate
+        });
+
+        // Calculate currentFlowRate from RPM if not directly available
+        if (liveStatus.currentFlowRate && liveStatus.currentFlowRate > 0) {
+            currentFlowRate = liveStatus.currentFlowRate;
+        } else if (liveStatus.currentRPM && tubeConfig?.mlPerRev > 0) {
+            // Calculate flow rate: RPM × mlPerRev = mL/min
+            currentFlowRate = liveStatus.currentRPM * tubeConfig.mlPerRev;
+            console.log('📊 Calculated currentFlowRate from RPM:', currentFlowRate);
+        }
+
+        startFlowTracking(true);
+    }
+
     // Update direction
     if (liveStatus.direction && liveStatus.direction !== currentDirection) {
         currentDirection = liveStatus.direction;
         updateDirectionDisplay();
     }
 
-    // Current RPM display is purely visual (large number)
-    // We do NOT update the input field here to avoid fighting the user
-    // (Removed el.currentRPM update as element was removed)
-
-    // Session dispensed (calculated via flow tracking in dashboard.js)
-
-
-    // Last updated
+    // Last updated display
     if (el.lastUpdated) {
-        el.lastUpdated.textContent = 'Last updated: ' + (liveStatus.lastUpdated ? Utils.formatRelativeTime(liveStatus.lastUpdated) : 'Never');
+        if (lastUpdatedTime && !isNaN(new Date(lastUpdatedTime).getTime())) {
+            el.lastUpdated.textContent = 'Last updated: ' + Utils.formatRelativeTime(lastUpdatedTime);
+        } else {
+            el.lastUpdated.textContent = 'Last updated: Never';
+            if (lastUpdatedTime) console.warn('Invalid lastUpdatedTime:', lastUpdatedTime);
+        }
     }
 
     updateControlsState();
@@ -1578,65 +1869,23 @@ function hideButtonLoading() {
     });
 }
 
-function updateConnectionStatus(connected) {
-    let statusClass = 'connecting';
-    let statusText = 'Connecting...';
+// ========================================
+// CONTROLLER LOCK SYSTEM
+// ========================================
 
-    if (connected) {
-        // Firebase is connected, now check device status
-        if (deviceStatus === null) {
-            // Still loading device data
-            statusClass = 'connecting';
-            statusText = 'Loading...';
-        } else if (deviceStatus.online === true) {
-            statusClass = 'connected';
-            statusText = 'Device Online';
-        } else {
-            // Case 3: Locked by another
-            imActiveController = false;
-            console.warn(`⛔ Locked by ${controller.email}. Inactive for: ${Math.round(timeDiff / 1000)}s`);
-            handleControllerLock(true, controller.email, controller.startTime);
-        }
-    });
+// ========================================
+// CONTROLLER LOCK SYSTEM (DEPRECATED)
+// ========================================
+// NOTE: Lock system is now handled by Session module (js/session.js)
+// Checking 'session' node instead of 'activeController'.
+
+function monitorActiveController(deviceRef) {
+    // Legacy function disabled. 
+    console.log("Legacy monitorActiveController disabled. Using Session module.");
 }
 
 function handleControllerLock(isLocked, lockedByEmail = '', startTime = null) {
-    // 1. Show/Hide Modal
-    if (el.userLockModal) {
-        if (isLocked) {
-            if (el.lockUserEmail) {
-                let msg = lockedByEmail;
-                if (startTime) {
-                    const date = new Date(startTime);
-                    msg += `\n(Since ${date.toLocaleTimeString()})`;
-                }
-                el.lockUserEmail.textContent = msg;
-            }
-            el.userLockModal.classList.add('active');
-        } else {
-            el.userLockModal.classList.remove('active');
-        }
-    } else {
-        // Firebase not connected
-        statusClass = 'disconnected';
-        statusText = 'No Connection';
-    }
-
-    // 2. Toggle Leave Button visibility
-    if (el.leaveDeviceBtn) {
-        el.leaveDeviceBtn.style.display = isLocked ? 'none' : 'flex';
-    }
-
-    // 3. Disable/Enable Controls (Security)
-    const mainContent = document.querySelector('.page-content');
-    if (mainContent) {
-        // We use pointer-events to disable interaction, 
-        // but adding a visual filter (grayscale) helps user understand
-        mainContent.style.pointerEvents = isLocked ? 'none' : 'auto';
-        mainContent.style.opacity = isLocked ? '0.3' : '1';
-        mainContent.style.filter = isLocked ? 'grayscale(100%) blur(2px)' : 'none';
-        mainContent.style.transition = 'all 0.5s ease';
-    }
+    // Legacy function disabled.
 }
 
 // ========================================
@@ -1644,19 +1893,6 @@ function handleControllerLock(isLocked, lockedByEmail = '', startTime = null) {
 // ========================================
 function cleanup() {
     if (!currentDeviceId) return;
-    const deviceRef = FirebaseApp.getDeviceRef(currentDeviceId);
-
-    // Release lock if we own it
-    if (currentAuthUser) {
-        // Check if we are the current controller before removing (optimistic check)
-        // Actually onDisconnect handles the crash case, but for clean navigation:
-        deviceRef.child('activeController').once('value', snapshot => {
-            const val = snapshot.val();
-            if (val && val.uid === currentAuthUser.uid) {
-                deviceRef.child('activeController').remove();
-            }
-        });
-    }
 
     // Stop heartbeat (session cleanup is handled in session.js)
     if (window.Session) {

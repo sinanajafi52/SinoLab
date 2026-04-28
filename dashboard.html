@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#facc15">
     <meta name="description" content="SinoLab - IoT Device Control">
     <meta name="mobile-web-app-capable" content="yes">
@@ -1133,11 +1134,17 @@
             bottom: 0;
             background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(5px);
-            display: flex;
+            display: none;
+            /* Hidden by default */
             align-items: center;
             justify-content: center;
             z-index: 1000;
             animation: fadeIn 0.2s ease;
+        }
+
+        .modal-backdrop.active {
+            display: flex;
+            /* Only show when active class is added */
         }
 
         @keyframes fadeIn {
@@ -1397,7 +1404,7 @@
                                 <div class="pump-section-label">Total Flow</div>
                                 <div class="total-flow-box">
                                     <span>
-                                        <span id="totalFlowValue" class="total-flow-value">0.000</span>
+                                        <span id="totalFlowValue" class="total-flow-value">0.00</span>
                                         <span class="total-flow-unit">L</span>
                                     </span>
                                 </div>
@@ -1632,8 +1639,8 @@
         </main>
     </div>
 
-    <!-- User Lock Modal (Blocking) -->
-    <div id="userLockModal" class="modal-backdrop">
+    <!-- User Lock Modal (Blocking) - Hidden by default -->
+    <div id="userLockModal" class="modal-backdrop" style="display: none;">
         <div class="modal-content">
             <div class="modal-icon" style="font-size: 4rem; margin-bottom: 20px; animation: pulse 2s infinite;">⛔</div>
             <h3 class="modal-title" style="color: #ef4444; font-size: 1.5rem; margin-bottom: 10px;">Access Denied</h3>
@@ -1647,7 +1654,7 @@
                     conflicts.</p>
             </div>
             <div class="modal-actions" style="display: flex; flex-direction: column; gap: 10px;">
-                <button id="forceUnlockBtn" class="btn btn-full" 
+                <button id="forceUnlockBtn" class="btn btn-full"
                     style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #ef4444;">
                     🔨 FORCE UNLOCK (Use with Caution)
                 </button>

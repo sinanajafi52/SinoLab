@@ -708,7 +708,9 @@ function startFlowTracking(isResuming = false) {
 
     // ALWAYS check for pumpStartedAt when pump is running - this handles resume automatically
     if (isPumpRunning && liveStatus && liveStatus.pumpStartedAt) {
-        const pumpStartedTime = new Date(liveStatus.pumpStartedAt).getTime();
+        const pumpStartedTime = typeof liveStatus.pumpStartedAt === 'number'
+            ? liveStatus.pumpStartedAt
+            : new Date(liveStatus.pumpStartedAt).getTime();
         const now = Date.now();
         const elapsed = now - pumpStartedTime;
 
@@ -1031,7 +1033,7 @@ async function startPump() {
             currentRPM: rpmToUse,
             currentFlowRate: flowRateVal > 0 ? flowRateVal : null,
             direction: currentDirection,
-            pumpStartedAt: new Date().toISOString(), // For Total Flow calculation
+            pumpStartedAt: Date.now(), // For Total Flow calculation
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: Date.now()

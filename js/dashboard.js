@@ -232,7 +232,7 @@ function setupEventHandlers() {
             switchInputMode('rpm');
         });
         el.rpmInput.addEventListener('change', (e) => {
-            const val = Math.min(400, Math.max(0, parseInt(e.target.value) || 0));
+            const val = Math.min(300, Math.max(0, parseInt(e.target.value) || 0));
             setRPM(val);
         });
     }
@@ -290,7 +290,7 @@ function setupEventHandlers() {
     }
     if (el.dispenseRpmInput) {
         el.dispenseRpmInput.addEventListener('change', (e) => {
-            const val = Math.min(400, Math.max(10, parseInt(e.target.value) || 100));
+            const val = Math.min(300, Math.max(10, parseInt(e.target.value) || 100));
             e.target.value = val;
             if (el.dispenseRpmSlider) el.dispenseRpmSlider.value = val;
         });
@@ -340,7 +340,7 @@ function setupEventHandlers() {
                 // Calculate nearest RPM
                 let calculatedRPM = Math.round(val / mlPerRev);
                 // Clamp RPM
-                calculatedRPM = Math.min(400, Math.max(0, calculatedRPM));
+                calculatedRPM = Math.min(300, Math.max(0, calculatedRPM));
 
                 // Update targetRPM
                 setRPM(calculatedRPM);
@@ -577,13 +577,13 @@ function navigateToActiveMode(activeMode) {
 // RPM CONTROL
 // ========================================
 function setRPM(value) {
-    targetRPM = Math.min(400, Math.max(0, value));
+    targetRPM = Math.min(300, Math.max(0, value));
 
     if (el.rpmInput) el.rpmInput.value = targetRPM;
     if (el.rpmSlider) {
         el.rpmSlider.value = targetRPM;
         // Update slider background
-        const percent = (targetRPM / 400) * 100;
+        const percent = (targetRPM / 300) * 100;
         el.rpmSlider.style.setProperty('--slider-percent', percent + '%');
     }
 
@@ -708,7 +708,9 @@ function startFlowTracking(isResuming = false) {
 
     // ALWAYS check for pumpStartedAt when pump is running - this handles resume automatically
     if (isPumpRunning && liveStatus && liveStatus.pumpStartedAt) {
-        const pumpStartedTime = new Date(liveStatus.pumpStartedAt).getTime();
+        const pumpStartedTime = typeof liveStatus.pumpStartedAt === 'number'
+            ? liveStatus.pumpStartedAt
+            : new Date(liveStatus.pumpStartedAt).getTime();
         const now = Date.now();
         const elapsed = now - pumpStartedTime;
 
@@ -1000,7 +1002,7 @@ async function startPump() {
     if (inputMode === 'flow') {
         // Convert flow to RPM
         if (mlPerRev > 0 && targetFlow > 0) {
-            rpmToUse = Math.min(400, Math.max(1, Math.round(targetFlow / mlPerRev)));
+            rpmToUse = Math.min(300, Math.max(1, Math.round(targetFlow / mlPerRev)));
             flowRateVal = targetFlow;
         } else {
             Utils.showWarning('Please set Flow higher than 0 and ensure device is calibrated');
@@ -1031,7 +1033,7 @@ async function startPump() {
             currentRPM: rpmToUse,
             currentFlowRate: flowRateVal > 0 ? flowRateVal : null,
             direction: currentDirection,
-            pumpStartedAt: new Date().toISOString(), // For Total Flow calculation
+            pumpStartedAt: Date.now(), // For Total Flow calculation
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: Date.now()
@@ -1250,8 +1252,8 @@ async function dispenseRpmBased() {
     const offTime = parseFloat(el.dispenseOffTime?.value) || 0;
     const direction = el.dispenseRpmDirCCW?.classList.contains('active') ? 'CCW' : 'CW';
 
-    if (rpm < 10 || rpm > 400) {
-        Utils.showWarning('Speed must be between 10 and 400 RPM');
+    if (rpm < 10 || rpm > 300) {
+        Utils.showWarning('Speed must be between 10 and 300 RPM');
         return;
     }
 
@@ -1320,11 +1322,11 @@ function updateEstimatedTime() {
 }
 
 function updateMaxVolume() {
-    // Calculate max volume based on 400 RPM limit
+    // Calculate max volume based on 300 RPM limit
     const mlPerRev = tubeConfig?.mlPerRev || 0;
     if (mlPerRev > 0 && el.volumeInput) {
-        // Max volume per minute at 400 RPM
-        const maxFlowPerMin = 400 * mlPerRev;
+        // Max volume per minute at 300 RPM
+        const maxFlowPerMin = 300 * mlPerRev;
         // Allow up to 60 minutes of dispensing at max speed
         const maxVolume = maxFlowPerMin * 60;
         el.volumeInput.max = maxVolume.toFixed(1);

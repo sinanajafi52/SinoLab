@@ -1037,7 +1037,9 @@ async function startPump() {
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: Date.now()
-        });
+        };
+
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update(payload);
 
         Utils.showSuccess('Pump started');
     } catch (error) {
@@ -1069,7 +1071,9 @@ async function stopPump() {
             acknowledged: false,
             lastIssuedBy: Auth.getCurrentUserId(),
             lastUpdated: Date.now()
-        });
+        };
+
+        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update(payload);
 
         Utils.showSuccess('Pump stopped');
     } catch (error) {

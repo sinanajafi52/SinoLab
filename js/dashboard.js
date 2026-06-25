@@ -974,17 +974,19 @@ function updateTubeMaintenanceUI() {
 async function togglePump() {
     console.log('togglePump called, isPumpRunning:', isPumpRunning);
 
-    // Safety check for connection
+    // If pump is running, ALWAYS allow stop (even if offline)
+    if (isPumpRunning) {
+        await stopPump();
+        return;
+    }
+
+    // For starting pump, check connection
     if (!connection || !connection.online) {
         Utils.showWarning('Device is offline');
         return;
     }
 
-    if (isPumpRunning) {
-        await stopPump();
-    } else {
-        await startPump();
-    }
+    await startPump();
 }
 
 async function startPump() {
@@ -1206,8 +1208,8 @@ function updateControlsState() {
 
     // Only lock ACTION buttons when offline, not input controls
     // Users should be able to adjust RPM/Flow even before connecting
+    // NOTE: startStopBtn is NOT included - Stop must ALWAYS work (even offline)
     const actionButtons = [
-        el.startStopBtn,
         el.rpmDispenseBtn,
         el.volumeDispenseBtn
     ];
@@ -1216,6 +1218,13 @@ function updateControlsState() {
     actionButtons.forEach(btn => {
         if (btn) btn.disabled = !isOnline;
     });
+
+    // Start/Stop button - only disable START when offline, STOP always works
+    if (el.startStopBtn) {
+        // If pump is running, button shows "Stop" - keep enabled
+        // If pump is stopped, button shows "Start" - disable if offline
+        el.startStopBtn.disabled = !isPumpRunning && !isOnline;
+    }
 
     // Dispense tabs - always enabled, but volume tab depends on calibration
     if (el.rpmModeTab) {

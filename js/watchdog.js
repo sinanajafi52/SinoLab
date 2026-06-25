@@ -7,7 +7,7 @@
 // CONSTANTS
 // ========================================
 const WATCHDOG_INTERVAL = 30 * 1000;  // Check every 30 seconds
-const STALE_THRESHOLD = 60 * 1000;    // Device is stale if lastSeen > 60 seconds ago
+const STALE_THRESHOLD = 180 * 1000;   // Device is stale if lastSeen > 3 minutes ago
 
 // ========================================
 // STATE

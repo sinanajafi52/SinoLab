@@ -43,7 +43,11 @@ let activeControllerListener = null;
 let activeControllerInterval = null; // Heartbeat
 let currentAuthUser = null;
 let imActiveController = false;
-let hasInitialNavigated = false; // Track if we've navigated based on activeMode on first load
+let hasInitialNavigated = false;
+
+// RPM Dispense: minimum Off Time (s). 0 is rejected because the firmware
+// then ignores On Time and runs continuously.
+const RPM_DISPENSE_MIN_OFF_TIME_SEC = 0.5; // Track if we've navigated based on activeMode on first load
 
 // Control state (Removed controlMode as it's no longer used)
 
@@ -306,7 +310,8 @@ function setupEventHandlers() {
     }
     if (el.dispenseOffTime) {
         el.dispenseOffTime.addEventListener('change', (e) => {
-            const val = Math.min(10, Math.max(0, parseFloat(e.target.value) || 0));
+            const val = Math.min(10, Math.max(RPM_DISPENSE_MIN_OFF_TIME_SEC,
+                parseFloat(e.target.value) || RPM_DISPENSE_MIN_OFF_TIME_SEC));
             e.target.value = val;
         });
     }
@@ -1234,6 +1239,7 @@ async function dispenseRpmBased() {
     const onTime = parseFloat(el.dispenseOnTime?.value) || 1;
     const offTime = parseFloat(el.dispenseOffTime?.value) || 0;
     const direction = el.dispenseRpmDirCCW?.classList.contains('active') ? 'CCW' : 'CW';
+    // (volume dispense below has its own offTime where 0 = single shot)
 
     if (rpm < 10 || rpm > 300) {
         Utils.showWarning('Speed must be between 10 and 300 RPM');
@@ -1245,8 +1251,10 @@ async function dispenseRpmBased() {
         return;
     }
 
-    if (offTime < 0 || offTime > 10) {
-        Utils.showWarning('Off Time must be between 0 and 10 seconds');
+    // Off Time 0 is not allowed: the firmware would ignore On Time and run
+    // the pump continuously (same minimum as the device's own RPM Dispense).
+    if (offTime < RPM_DISPENSE_MIN_OFF_TIME_SEC || offTime > 10) {
+        Utils.showWarning(`Off Time must be between ${RPM_DISPENSE_MIN_OFF_TIME_SEC} and 10 seconds`);
         return;
     }
 
@@ -1481,7 +1489,10 @@ function subscribeToDevice() {
             if (el.dispenseRpmInput && data.rpm) el.dispenseRpmInput.value = data.rpm;
             if (el.dispenseRpmSlider && data.rpm) el.dispenseRpmSlider.value = data.rpm;
             if (el.dispenseOnTime && data.onTime !== undefined) el.dispenseOnTime.value = data.onTime / 1000; // Convert ms to seconds
-            if (el.dispenseOffTime && data.offTime !== undefined) el.dispenseOffTime.value = data.offTime / 1000;
+            if (el.dispenseOffTime && data.offTime !== undefined) {
+                // older saved settings may contain 0, which is no longer allowed
+                el.dispenseOffTime.value = Math.max(RPM_DISPENSE_MIN_OFF_TIME_SEC, data.offTime / 1000);
+            }
 
             // Set direction
             if (data.direction === 'CCW') {

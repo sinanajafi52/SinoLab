@@ -163,7 +163,7 @@ test('linked user starts and stops the pump (STATUS)', async () => {
 test('linked user starts RPM and VOLUME dispense in one atomic update', async () => {
   const a = alice();
   await assertSucceeds(dev(a).update({
-    rpmDispense: { rpm: 150, onTime: 300, offTime: 0, direction: 'CW' },
+    rpmDispense: { rpm: 150, onTime: 300, offTime: 500, direction: 'CW' },
     'liveStatus/activeMode': 'RPM', 'liveStatus/inputMode': null, 'liveStatus/acknowledged': false,
     'liveStatus/lastIssuedBy': 'alice', 'liveStatus/lastUpdated': NOW,
   }));
@@ -182,6 +182,10 @@ test('commands are validated', async () => {
   await assertFails(dev(a).child('liveStatus/unknownField').set(1));
   await assertFails(dev(a).child('volumeDispense/targetVolume').set(0));
   await assertFails(dev(a).child('rpmDispense/rpm').set('fast'));
+  // RPM dispense: Off Time 0 is not allowed (firmware would run continuously)
+  await assertFails(dev(a).child('rpmDispense').set({ rpm: 100, onTime: 1000, offTime: 0, direction: 'CW' }));
+  // Volume dispense: Off Time 0 = single shot, allowed
+  await assertSucceeds(dev(a).child('volumeDispense').set({ targetVolume: 5, offTime: 0, direction: 'CW' }));
 });
 
 test('unlinked users cannot control a device', async () => {

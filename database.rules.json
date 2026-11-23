@@ -110,7 +110,8 @@
           ".write": "auth != null && auth.provider !== 'anonymous' && root.child('users').child(auth.uid).child('linkedDevices').child($deviceId).exists()",
           "rpm": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 300" },
           "onTime": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3600000" },
-          "offTime": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3600000" },
+          // >= 500 ms: with offTime 0 the firmware ignores onTime and runs continuously
+          "offTime": { ".validate": "newData.isNumber() && newData.val() >= 500 && newData.val() <= 3600000" },
           "direction": { ".validate": "newData.isString() && newData.val().matches(/^(CW|CCW)$/)" },
           "$other": { ".validate": false }
         },

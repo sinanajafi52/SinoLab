@@ -25,7 +25,7 @@
 ---
 
 ## 📁 connection/
-*وضعیت اتصال - Board هر ۵ ثانیه آپدیت می‌کند*
+*وضعیت اتصال - Board هر ۳۰ ثانیه heartbeat می‌فرستد*
 
 | Parameter | Type | Values | Board | Web App | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -33,7 +33,10 @@
 | `ip` | string | "192.168.1.105" | ✍️ WRITE | 👁️ READ | آدرس IP محلی |
 | `lastSeen` | number | Timestamp (ms) | ✍️ WRITE | 👁️ READ | آخرین زمان حضور (Unix) |
 
-💡 **Web App Logic:** اگر `Date.now() - lastSeen > 15000` باشد، دستگاه Offline فرض می‌شود.
+💡 **Web App Logic:** دستگاه فقط وقتی Online است که `online == true` **و** `serverNow - lastSeen < 90000` (سه heartbeat از دست رفته) باشد — `Utils.isDeviceOnline()`.
+`online` به‌تنهایی کافی نیست: با قطع برق `true` باقی می‌ماند.
+اگر `lastSeen` کوچکتر از `1e12` باشد (دستگاه هنوز ساعت NTP ندارد و uptime می‌نویسد)، داشبورد با دیدن تغییر `connection/` تشخیص می‌دهد.
+وب‌اپ دیگر روی `connection/` چیزی نمی‌نویسد.
 
 ---
 
@@ -53,15 +56,16 @@
 ---
 
 ## 📁 maintenance/
-*اطلاعات نگهداری - Web App مدیریت می‌کند*
+*اطلاعات نگهداری*
 
 | Parameter | Type | Values | Board | Web App | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `lastTubeChange` | number | Timestamp | 👁️ READ | ✍️ WRITE | زمان آخرین تعویض تیوب |
-| `tubeRuntimeSeconds` | number | 0 - ∞ | 👁️ READ | ✍️ WRITE | کارکرد از آخرین تعویض (ثانیه) |
-| `totalRuntimeSeconds`| number | 0 - ∞ | 👁️ READ | ✍️ WRITE | کل کارکرد دستگاه (ثانیه) |
+| `lastTubeChange` | number | Timestamp (ms) | 👁️ READ | ✍️ WRITE | زمان آخرین تعویض تیوب |
+| `tubeRuntimeSeconds` | number | 0 - ∞ | ✍️ WRITE | ✍️ WRITE (فقط ریست به 0) | کارکرد از آخرین تعویض (ثانیه) |
+| `totalRuntimeSeconds`| number | 0 - ∞ | ✍️ WRITE | 👁️ READ | کل کارکرد دستگاه (ثانیه) |
 
-📝 **Logic:** Web App هنگامی که `activeMode != "NONE"` است، هر ثانیه runtimeها را افزایش می‌دهد.
+📝 **Logic:** شمارنده‌های runtime را **فقط دستگاه** می‌نویسد (هر ۶۰ ثانیه حین کار). وب‌اپ فقط برای نمایش بین دو آپدیت تخمین می‌زند.
+(قبلاً وب‌اپ هم هر ۱۰ ثانیه می‌نوشت و runtime دو بار شمرده می‌شد.)
 
 ---
 
@@ -86,14 +90,9 @@
 4. **Web App:** Sets `acknowledged = false`, `activeMode = "NONE"`.
 5. **Board:** Reads change, Stops Pump, Sets `acknowledged = true`.
 
-🧮 **Board RPM Calculation:**
-```cpp
-if (inputMode == "FLOW") {
-    RPM = currentFlowRate / tubeConfig.mlPerRev;
-} else {
-    RPM = currentRPM;
-}
-```
+🧮 **Board RPM:** فریمور فقط `currentRPM` (عدد صحیح) را می‌خواند؛ `inputMode` و `currentFlowRate` فقط برای نمایش در وب‌اپ هستند. در حالت FLOW وب‌اپ خودش RPM را حساب و گرد می‌کند.
+
+🛑 **Board writes:** دستگاه بعد از توقف محلی، پایان دیسپنس حجمی، یا fail-safe (برنچ جدید فریمور) مقدار `activeMode = "NONE"` و `acknowledged = true` می‌نویسد. وب‌اپ وضعیت پمپ را فقط از `activeMode` می‌گیرد.
 
 ---
 
@@ -103,8 +102,8 @@ if (inputMode == "FLOW") {
 | Parameter | Type | Values | Board | Web App | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `rpm` | number | 0 - 400 | 👁️ READ | ✍️ WRITE | سرعت |
-| `onTime` | number | 500 - 10000 | 👁️ READ | ✍️ WRITE | مدت روشن (ms) |
-| `offTime` | number | 500 - 10000 | 👁️ READ | ✍️ WRITE | مدت خاموش (ms) |
+| `onTime` | number | 100 - 10000 (عدد صحیح) | 👁️ READ | ✍️ WRITE | مدت روشن (ms) |
+| `offTime` | number | 0 - 10000 (عدد صحیح) | 👁️ READ | ✍️ WRITE | مدت خاموش (ms) — ⚠️ `0` در فریمور فعلی یعنی کار مداوم (بخش پایین) |
 | `direction` | string | "CW", "CCW" | 👁️ READ | ✍️ WRITE | جهت چرخش |
 
 🔄 **Workflow:**
@@ -121,22 +120,42 @@ if (inputMode == "FLOW") {
 
 | Parameter | Type | Values | Board | Web App | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `targetVolume` | number | 0.1 - 999 | 👁️ READ | ✍️ WRITE | حجم هر cycle (mL) |
-| `offTime` | number | 500 - 10000 | 👁️ READ | ✍️ WRITE | مدت خاموش بین cycleها (ms) |
+| `targetVolume` | number | > 0 | 👁️ READ | ✍️ WRITE | حجم هر cycle (mL) — **فیلدی که فریمور می‌خواند** |
+| `offTime` | number | 0 - 10000 | 👁️ READ | ✍️ WRITE | مدت خاموش بین cycleها (ms)؛ `0` = یک‌بار |
 | `direction` | string | "CW", "CCW" | 👁️ READ | ✍️ WRITE | جهت چرخش |
+| `rpm`, `onTime` | number | 120 / ms | — | ✍️ WRITE | فقط اطلاعاتی (فریمور نمی‌خواند) |
 
-🧮 **Board Calculation:**
-```cpp
-revolutions = targetVolume / tubeConfig.mlPerRev;
-// Calculate duration based on max speed or current setting
-```
+🧮 **Board Calculation:** همیشه با `120 RPM`. فریمور main: زمان = `targetVolume / (mlPerRev × 2)`؛ برنچ جدید فریمور: دقیقاً `targetVolume / mlPerRev` دور (شمارش step).
+⚠️ تا قبل از این اصلاح، وب‌اپ `targetVolume` را نمی‌نوشت و دیسپنس حجمی از وب عملاً کار نمی‌کرد.
+
+✍️ **Write:** پارامترها و `liveStatus` در **یک** multi-path update اتمی نوشته می‌شوند تا دستگاه هیچ‌وقت trigger را با پارامتر قدیمی نخواند.
 
 ---
 
 ## 🛡️ Safety & Logic Rules
-1. **WiFi Timeout:** Board > 15s without connection + `activeMode != "NONE"` → **AUTO-STOP**.
-2. **Calibration Lock:** `tubeConfig/` writable ONLY by Board (Physical UI).
-3. **Control Lock:** When `online` is true, physical controls on device might be locked (optional).
+1. **Fail-safe (برنچ جدید فریمور):** WiFi قطع شود یا ۳۰ ثانیه poll موفق نباشد → پمپی که از وب روشن شده **AUTO-STOP**، و بعد از اتصال `activeMode = "NONE"`. (فریمور main این را ندارد.)
+2. **Calibration Lock:** `tubeConfig/` فقط توسط Board نوشته می‌شود — با Rules اعمال می‌شود.
+3. **Stop همیشه کار می‌کند:** در وب‌اپ حتی وقتی دستگاه Offline است (دستور در صف می‌ماند)، و روی دستگاه با کلیک روی صفحه‌ی Frog Status.
+
+## 🔐 Security Rules (`database.rules.json`)
+- کاربر وب (Google) فقط دستگاه‌هایی را می‌بیند و کنترل می‌کند که در `users/{uid}/linkedDevices` لینک کرده؛ لیست کل `devices/` برای هیچ‌کس قابل خواندن نیست.
+- قبل از لینک فقط `identity/` قابل خواندن است (برای بررسی وجود دستگاه).
+- دستگاه (anonymous) فقط می‌تواند گزارش بدهد و پمپ را **خاموش** کند (`activeMode = "NONE"`, `acknowledged = true`)؛ نمی‌تواند پمپ را روشن یا پارامتر دیسپنس را عوض کند.
+- همه‌ی فیلدها از نظر نوع و محدوده validate می‌شوند؛ نودهای ساختار قدیمی دیگر قابل نوشتن نیستند.
+- قفل `session/` در Rules هم اعمال می‌شود (فقط آزاد، مال خود کاربر، یا بدون heartbeat بیش از ۵ دقیقه).
+- تست: `cd tests/rules && npm install && npm test` (Firebase Emulator، نیاز به Java).
+
+## 🔧 Pending firmware changes (درخواست‌های سمت فریمور)
+1. **احراز هویت دستگاه:** فریمور در هر بوت `signUp` ناشناس می‌کند؛ Rules نمی‌تواند دستگاه واقعی را از هر کلاینت ناشناس دیگر تشخیص دهد. پیشنهاد: حساب اختصاصی برای هر دستگاه (یا custom token) و ثبت uid دستگاه، سپس غیرفعال کردن Anonymous Auth.
+2. **Pairing code:** هر کسی Device ID را بداند می‌تواند لینک کند. پیشنهاد: کد تصادفی روی صفحه‌ی System Info دستگاه + `devices/{id}/pairing/code` (فقط دستگاه می‌نویسد، هیچ‌کس نمی‌خواند) و Rule لینک که کد را چک کند. (نیاز به بند ۱ دارد.)
+3. **RPM Dispense با `offTime = 0`:** فریمور `onTime` را نادیده می‌گیرد و پمپ بی‌وقفه کار می‌کند، در حالی که وب‌اپ «Running … for Xs» نشان می‌دهد. باید معنای آن قطعی شود (پیشنهاد: یک‌بار به مدت `onTime` و بعد `NONE`).
+4. **ریست runtime بعد از تعویض تیوب از بین می‌رود:** دستگاه `lastTubeChange` را فقط هنگام اتصال و با `getInt` (سرریز برای میلی‌ثانیه) می‌خواند و شمارنده‌ی محلی خودش را هر ۶۰ ثانیه روی صفر وب‌اپ می‌نویسد. باید دوره‌ای و به‌صورت double خوانده شود.
+5. **`lastSeen` با زمان سرور:** به‌جای ساعت محلی (که قبل از NTP عدد uptime است) از server timestamp (`setTimestampAsync`) استفاده شود.
+6. **دقت runtime:** هر ۶۰ ثانیه فقط اگر پمپ در همان لحظه روشن باشد ۶۰ ثانیه اضافه می‌شود؛ باید زمان واقعی کارکرد شمرده شود.
+7. **پیش‌فرض خطرناک:** اگر خواندن `rpm` شکست بخورد پمپ با ۱۰۰ RPM روشن می‌شود؛ بهتر است دستور رد شود. خواندن `liveStatus` هم بهتر است در یک درخواست (JSON) باشد.
+8. **Polling هر ۲ ثانیه** → stream یا task جدا روی core دیگر.
+9. **RPM اعشاری:** فریمور `currentRPM` را int می‌خواند؛ در حالت FLOW دقت جریان به‌خاطر گرد کردن کم می‌شود.
+10. فایل قدیمی `firebase-rules.json` در ریپوی فریمور با ساختار فعلی هم‌خوانی ندارد؛ مرجع Rules این ریپو است.
 
 ---
 

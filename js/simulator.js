@@ -68,10 +68,16 @@ const Simulator = {
                 lastIssuedBy: "simulator",
                 lastUpdated: Date.now()
             }
+        };
+
+        try {
+            // Write the simulated device state (merges with existing data)
+            await this.deviceRef.update(initialData);
 
             // Load values into UI inputs (from current or fresh data)
-            const freshSnap = await this.deviceRef.once('value');
-            const data = freshSnap.val();
+            // (a device may read its nodes one by one, not the whole device)
+            const freshSnap = await this.deviceRef.child('tubeConfig').once('value');
+            const data = { tubeConfig: freshSnap.val() };
 
             if (data.tubeConfig) {
                 if (document.getElementById('simTubeName')) document.getElementById('simTubeName').value = data.tubeConfig.tubeName || "2mm";

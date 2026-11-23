@@ -177,11 +177,6 @@ async function signOut() {
     try {
         Utils.showLoading('Signing out...');
 
-        // Stop device watchdog
-        if (window.Watchdog) {
-            Watchdog.stop();
-        }
-
         // Release all device sessions before signing out
         if (window.Session) {
             await Session.releaseAllSessions();
@@ -235,21 +230,11 @@ function initAuthListener(onSignedIn, onSignedOut) {
                 photoURL: user.photoURL
             });
 
-            // Start device watchdog
-            if (window.Watchdog) {
-                Watchdog.start();
-            }
-
             if (onSignedIn) {
                 onSignedIn(user);
             }
         } else {
             console.log('User signed out');
-
-            // Stop device watchdog
-            if (window.Watchdog) {
-                Watchdog.stop();
-            }
 
             if (onSignedOut) {
                 onSignedOut();

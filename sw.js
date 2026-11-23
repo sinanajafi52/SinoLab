@@ -4,25 +4,29 @@
  */
 
 // Cache version - update this when deploying new versions
-const CACHE_VERSION = 'v1.0.1';
+const CACHE_VERSION = 'v1.1.0';
 const CACHE_NAME = `frogpump-${CACHE_VERSION}`;
 
-// Files to cache for offline use
+// Files to cache for offline use.
+// Paths are relative to this file, so the app also works when it is hosted
+// in a sub-folder (e.g. GitHub Pages /<repo>/).
 const STATIC_ASSETS = [
-    '/',
-    '/index.html',
-    '/device.html',
-    '/dashboard.html',
-    '/offline.html',
-    '/css/style.css',
-    '/js/firebase-config.js',
-    '/js/utils.js',
-    '/js/auth.js',
-    '/js/device.js',
-    '/js/dashboard.js',
-    '/manifest.json',
-    '/icons/icon-192.png',
-    '/icons/icon-512.png'
+    './',
+    'index.html',
+    'device.html',
+    'dashboard.html',
+    'offline.html',
+    'css/style.css',
+    'js/firebase-config.js',
+    'js/utils.js',
+    'js/auth.js',
+    'js/session.js',
+    'js/device.js',
+    'js/migration.js',
+    'js/dashboard.js',
+    'manifest.json',
+    'icons/icon-192.png',
+    'icons/icon-512.png'
 ];
 
 // External resources to cache
@@ -143,7 +147,7 @@ self.addEventListener('fetch', (event) => {
                                 return cachedResponse;
                             }
                             // Return offline page
-                            return caches.match('/offline.html');
+                            return caches.match('offline.html');
                         });
                 })
         );

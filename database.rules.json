@@ -1,0 +1,164 @@
+{
+  // Frog Pump - Realtime Database rules
+  //
+  // Who is who:
+  //   - Web app users sign in with Google  -> auth.provider != 'anonymous'
+  //   - The ESP32 firmware signs in anonymously -> auth.provider == 'anonymous'
+  //
+  // A web user can read/control a device only after linking it
+  // (users/{uid}/linkedDevices/{deviceId}). Anonymous clients get only what
+  // the firmware needs: they can report state and STOP the pump, but can
+  // never start it or change dispense parameters.
+  //
+  // NOTE: linking is not yet protected by a pairing secret, and anonymous
+  // clients cannot be told apart from the real device. Both need firmware
+  // support (see DATABASE_STRUCTURE.md, "Pending firmware changes").
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid && auth.provider !== 'anonymous'",
+        ".write": "auth != null && auth.uid === $uid && auth.provider !== 'anonymous'",
+
+        "email": { ".validate": "newData.isString() && newData.val().length <= 320" },
+        "displayName": { ".validate": "newData.isString() && newData.val().length <= 256" },
+        "photoURL": { ".validate": "newData.isString() && newData.val().length <= 2048" },
+        "lastLogin": { ".validate": "newData.isNumber()" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+
+        "linkedDevices": {
+          "$deviceId": {
+            ".validate": "$deviceId.matches(/^FROG-[0-9A-F]{6}$/) && newData.hasChild('linkedAt')",
+            "linkedAt": { ".validate": "newData.isNumber()" },
+            "nickname": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "$other": { ".validate": false }
+      }
+    },
+
+    "devices": {
+      "$deviceId": {
+        // Linked web users can read everything of their device
+        ".read": "auth != null && auth.provider !== 'anonymous' && root.child('users').child(auth.uid).child('linkedDevices').child($deviceId).exists()",
+
+        // ── Written by the device ────────────────────────────────────
+        "identity": {
+          // Readable by any signed-in client so a device can be found before linking
+          ".read": "auth != null",
+          ".write": "auth != null && auth.provider === 'anonymous'",
+          "mac": { ".validate": "newData.isString() && newData.val().length <= 32" },
+          "firmware": { ".validate": "newData.isString() && newData.val().length <= 32" },
+          "$other": { ".validate": false }
+        },
+
+        "connection": {
+          ".read": "auth != null && auth.provider === 'anonymous'",
+          ".write": "auth != null && auth.provider === 'anonymous'",
+          "online": { ".validate": "newData.isBoolean()" },
+          "ip": { ".validate": "newData.isString() && newData.val().length <= 64" },
+          "lastSeen": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "$other": { ".validate": false }
+        },
+
+        "tubeConfig": {
+          ".read": "auth != null && auth.provider === 'anonymous'",
+          ".write": "auth != null && auth.provider === 'anonymous'",
+          "tubeName": { ".validate": "newData.isString() && newData.val().length <= 32" },
+          "mlPerRev": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 100" },
+          "antiDrip": { ".validate": "newData.isBoolean()" },
+          "calibrationType": { ".validate": "newData.isString() && newData.val().length <= 16" },
+          "lastCalibrated": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "$other": { ".validate": false }
+        },
+
+        // ── Commands (web app) + acknowledgement (device) ───────────
+        "liveStatus": {
+          ".read": "auth != null && auth.provider === 'anonymous'",
+          ".write": "auth != null && auth.provider !== 'anonymous' && root.child('users').child(auth.uid).child('linkedDevices').child($deviceId).exists()",
+
+          // The device may only reset the mode to NONE (stop / finished / fail-safe)
+          "activeMode": {
+            ".write": "auth != null && auth.provider === 'anonymous' && newData.val() === 'NONE'",
+            ".validate": "newData.isString() && newData.val().matches(/^(NONE|STATUS|RPM|VOLUME|PREFLUSH)$/)"
+          },
+          // The device may only acknowledge (true); the web app sets false
+          "acknowledged": {
+            ".write": "auth != null && auth.provider === 'anonymous' && newData.val() === true",
+            ".validate": "newData.isBoolean()"
+          },
+          "pumpStartedAt": {
+            ".write": "auth != null && auth.provider === 'anonymous'",
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "currentRPM": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 300" },
+          "currentFlowRate": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000" },
+          "direction": { ".validate": "newData.isString() && newData.val().matches(/^(CW|CCW)$/)" },
+          "inputMode": { ".validate": "newData.isString() && newData.val().matches(/^(RPM|FLOW)$/)" },
+          "lastIssuedBy": { ".validate": "newData.isString() && newData.val().length <= 128" },
+          "lastUpdated": { ".validate": "newData.isNumber() || (newData.isString() && newData.val().length <= 40)" },
+          "updatedAt": { ".validate": "newData.isNumber() || (newData.isString() && newData.val().length <= 40)" },
+          "$other": { ".validate": false }
+        },
+
+        "rpmDispense": {
+          ".read": "auth != null && auth.provider === 'anonymous'",
+          ".write": "auth != null && auth.provider !== 'anonymous' && root.child('users').child(auth.uid).child('linkedDevices').child($deviceId).exists()",
+          "rpm": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 300" },
+          "onTime": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3600000" },
+          "offTime": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3600000" },
+          "direction": { ".validate": "newData.isString() && newData.val().matches(/^(CW|CCW)$/)" },
+          "$other": { ".validate": false }
+        },
+
+        "volumeDispense": {
+          ".read": "auth != null && auth.provider === 'anonymous'",
+          ".write": "auth != null && auth.provider !== 'anonymous' && root.child('users').child(auth.uid).child('linkedDevices').child($deviceId).exists()",
+          "targetVolume": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 100000" },
+          "offTime": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3600000" },
+          "direction": { ".validate": "newData.isString() && newData.val().matches(/^(CW|CCW)$/)" },
+          "rpm": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 300" },
+          "onTime": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "$other": { ".validate": false }
+        },
+
+        // ── Maintenance: runtime by the device, tube change by the web app ──
+        "maintenance": {
+          ".read": "auth != null && auth.provider === 'anonymous'",
+          ".write": "auth != null && auth.provider !== 'anonymous' && root.child('users').child(auth.uid).child('linkedDevices').child($deviceId).exists()",
+          "tubeRuntimeSeconds": {
+            ".write": "auth != null && auth.provider === 'anonymous'",
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "totalRuntimeSeconds": {
+            ".write": "auth != null && auth.provider === 'anonymous'",
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "lastTubeChange": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "$other": { ".validate": false }
+        },
+
+        // ── Single-user control lock (web app only) ──────────────────
+        // Free, own, or stale (no heartbeat for 5 minutes) sessions can be taken.
+        "session": {
+          ".write": "auth != null && auth.provider !== 'anonymous' && root.child('users').child(auth.uid).child('linkedDevices').child($deviceId).exists() && (!data.exists() || data.child('activeUser').val() === auth.uid || (auth.token.email != null && data.child('userEmail').val() === auth.token.email) || !data.child('lastActive').isNumber() || data.child('lastActive').val() < now - 300000)",
+          ".validate": "newData.child('activeUser').val() === auth.uid",
+          "activeUser": { ".validate": "newData.isString()" },
+          "userEmail": { ".validate": "newData.isString() && newData.val().length <= 320" },
+          "userName": { ".validate": "newData.isString() && newData.val().length <= 256" },
+          "lastActive": { ".validate": "newData.isNumber()" },
+          "claimedAt": { ".validate": "newData.isNumber()" },
+          "$other": { ".validate": false }
+        },
+
+        // Old-schema nodes (info, status, settings, control, commands, ...)
+        // stay readable for linked users but cannot be written anymore.
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

@@ -23,7 +23,11 @@ async function deviceExists(deviceId) {
     if (!deviceId) return false;
 
     try {
-        const snapshot = await FirebaseApp.getDeviceRef(deviceId).once('value');
+        // Only identity/ is readable before a device is linked (see
+        // database.rules.json); every device writes it when it comes online.
+        const snapshot = await FirebaseApp.getDeviceRef(deviceId)
+            .child('identity')
+            .once('value');
         return snapshot.exists();
     } catch (error) {
         console.error('Error checking device existence:', error);
@@ -98,7 +102,7 @@ async function getDeviceLiveStatus(deviceId) {
  */
 async function isDeviceOnline(deviceId) {
     const conn = await getDeviceConnection(deviceId);
-    return conn?.online === true;
+    return Utils.isDeviceOnline(conn);
 }
 
 // ========================================
@@ -279,7 +283,7 @@ async function getLinkedDevicesWithInfo() {
             linkedAt: linkData?.linkedAt,
             info: info || {},
             status: conn || {},
-            online: conn?.online === true,
+            online: Utils.isDeviceOnline(conn),
             sessionAvailable: sessionStatus.available,
             sessionMessage: sessionStatus.message,
             isMySession: isMySession,
@@ -318,6 +322,7 @@ async function renderDeviceList(containerId = 'deviceList') {
             return;
         }
 
+        const esc = Utils.escapeHtml;
         container.innerHTML = devices.map(device => {
             // Online status indicator (small dot)
             const onlineIndicator = device.online ?
@@ -328,14 +333,14 @@ async function renderDeviceList(containerId = 'deviceList') {
             const managingBadge = device.isMySession ?
                 `<div class="managing-badge">
                     <span class="managing-text">Managing</span>
-                    <button class="release-btn" data-release-device="${device.deviceId}" title="Release control">✕</button>
+                    <button class="release-btn" data-release-device="${esc(device.deviceId)}" title="Release control">✕</button>
                 </div>` : '';
 
             // Running status with Stop button (only if pump is running and I have session)
             const runningBadge = (device.isPumpRunning && device.isMySession) ?
                 `<div class="running-badge">
                     <span class="running-text">Running</span>
-                    <button class="stop-pump-btn" data-stop-device="${device.deviceId}" title="Stop pump">Stop</button>
+                    <button class="stop-pump-btn" data-stop-device="${esc(device.deviceId)}" title="Stop pump">Stop</button>
                 </div>` :
                 (device.isPumpRunning ?
                     `<div class="running-badge inactive">
@@ -344,17 +349,17 @@ async function renderDeviceList(containerId = 'deviceList') {
 
             // Locked by another user indicator
             const lockedIndicator = (!device.sessionAvailable && !device.isMySession) ?
-                `<div class="locked-badge">🔒 ${device.sessionMessage}</div>` : '';
+                `<div class="locked-badge">🔒 ${esc(device.sessionMessage)}</div>` : '';
 
             return `
-            <div class="device-card ${!device.sessionAvailable && !device.isMySession ? 'locked' : ''} ${device.isMySession ? 'my-session' : ''}" data-device-id="${device.deviceId}">
+            <div class="device-card ${!device.sessionAvailable && !device.isMySession ? 'locked' : ''} ${device.isMySession ? 'my-session' : ''}" data-device-id="${esc(device.deviceId)}">
                 <div class="device-card-icon">🐸</div>
                 <div class="device-card-info">
                     <div class="device-card-name">
-                        ${device.nickname || device.info?.deviceName || 'Frog Pump'}
+                        ${esc(device.nickname || device.info?.deviceName || 'Frog Pump')}
                         ${onlineIndicator}
                     </div>
-                    <div class="device-card-id">${device.deviceId}</div>
+                    <div class="device-card-id">${esc(device.deviceId)}</div>
                 </div>
                 <div class="device-card-actions">
                     ${lockedIndicator}
@@ -409,7 +414,7 @@ async function renderDeviceList(containerId = 'deviceList') {
                         pumpStartedAt: null,
                         acknowledged: false,
                         lastIssuedBy: Auth.getCurrentUserId(),
-                        lastUpdated: new Date().toISOString()
+                        lastUpdated: Date.now()
                     });
                     Utils.hideLoading();
                     Utils.showSuccess('Pump stopped');

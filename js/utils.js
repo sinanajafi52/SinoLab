@@ -17,6 +17,14 @@ const STORAGE_KEYS = {
     USER: 'frogpump_user'
 };
 
+// Device liveness: the firmware sends a heartbeat (connection/lastSeen)
+// every 30 s. After this long without one the device is shown offline.
+const DEVICE_OFFLINE_AFTER_MS = 90 * 1000;
+
+// Timestamps below this are not Unix epoch ms (the firmware falls back to
+// its uptime counter until NTP time is synced).
+const MIN_EPOCH_MS = 1e12;
+
 // Error messages
 const ERRORS = {
     INVALID_DEVICE_ID: 'Invalid Device ID format. Example: FROG-A1B2C3',
@@ -51,6 +59,45 @@ function isValidDeviceId(deviceId) {
  */
 function normalizeDeviceId(deviceId) {
     return deviceId ? deviceId.toUpperCase().trim() : '';
+}
+
+/**
+ * Escape text for safe insertion into HTML (all database values that are
+ * rendered with innerHTML must go through this).
+ * @param {*} value
+ * @returns {string}
+ */
+function escapeHtml(value) {
+    if (value === undefined || value === null) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
+ * Derive whether a device is online from its connection node.
+ * `online` alone is not enough: it stays true after a power cut, because
+ * the device can only clear it on a clean restart.
+ * @param {Object|null} connection - devices/{id}/connection
+ * @param {number} [now] - current server time in ms
+ * @returns {boolean}
+ */
+function isDeviceOnline(connection, now) {
+    if (!connection || connection.online !== true) return false;
+
+    const lastSeen = Number(connection.lastSeen);
+    if (!(lastSeen > MIN_EPOCH_MS)) {
+        // No usable wall-clock timestamp (device not NTP-synced yet):
+        // trust the flag; callers that watch the node can detect staleness.
+        return true;
+    }
+
+    const current = now !== undefined ? now :
+        (window.FirebaseApp && FirebaseApp.serverNow ? FirebaseApp.serverNow() : Date.now());
+    return current - lastSeen < DEVICE_OFFLINE_AFTER_MS;
 }
 
 // ========================================
@@ -369,7 +416,7 @@ function showToast(message, type = 'info', duration = 4000) {
     toast.innerHTML = `
         <span class="toast-icon">${icons[type] || icons.info}</span>
         <div class="toast-content">
-            <span class="toast-message">${message}</span>
+            <span class="toast-message">${escapeHtml(message)}</span>
         </div>
         <button class="toast-close">×</button>
     `;
@@ -429,8 +476,8 @@ function showBlockingError(title, message, onClose = null) {
     overlay.innerHTML = `
         <div class="blocking-error-content">
             <div class="blocking-error-icon">⛔</div>
-            <h3 class="blocking-error-title">${title}</h3>
-            <p class="blocking-error-message">${message}</p>
+            <h3 class="blocking-error-title">${escapeHtml(title)}</h3>
+            <p class="blocking-error-message">${escapeHtml(message)}</p>
             <button class="blocking-error-btn">OK</button>
         </div>
     `;
@@ -616,10 +663,15 @@ window.Utils = {
     DEVICE_ID_REGEX,
     STORAGE_KEYS,
     ERRORS,
+    DEVICE_OFFLINE_AFTER_MS,
 
     // Validation
     isValidDeviceId,
     normalizeDeviceId,
+
+    // Safety / device state
+    escapeHtml,
+    isDeviceOnline,
 
     // Storage
     saveToStorage,

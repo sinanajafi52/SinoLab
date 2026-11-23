@@ -42,6 +42,21 @@ connectionRef.on('value', (snapshot) => {
     console.log('Firebase connection status:', isFirebaseConnected ? 'Connected' : 'Disconnected');
 });
 
+// Server time offset (client clock vs Firebase server), used to compare
+// device timestamps with "now" even when the phone/PC clock is off.
+let serverTimeOffsetMs = 0;
+database.ref('.info/serverTimeOffset').on('value', (snapshot) => {
+    serverTimeOffsetMs = Number(snapshot.val()) || 0;
+});
+
+/**
+ * Estimated server time in ms (Date.now() corrected by the server offset)
+ * @returns {number}
+ */
+function serverNow() {
+    return Date.now() + serverTimeOffsetMs;
+}
+
 /**
  * Check if Firebase is connected
  * @returns {boolean}
@@ -135,6 +150,7 @@ window.FirebaseApp = {
     database,
     googleProvider,
     isConnected,
+    serverNow,
     getCurrentUser,
     isAuthenticated,
     signInWithGoogle,

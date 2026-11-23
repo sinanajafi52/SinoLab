@@ -17,6 +17,9 @@ let maintenance = null;     // New: maintenance node
 let isCalibrated = false;
 let isPumpRunning = false;
 let deviceOnlineStatus = false;
+let connectionChangedAt = 0;      // client time of the last connection/ update
+let connectionWatchStart = 0;     // client time the connection listener started
+let onlineRecheckTimer = null;    // re-evaluates liveness while the page is open
 let currentDirection = 'CW';
 let targetRPM = 100;
 let targetFlow = 0;  // Separate flow value
@@ -40,7 +43,11 @@ let activeControllerListener = null;
 let activeControllerInterval = null; // Heartbeat
 let currentAuthUser = null;
 let imActiveController = false;
-let hasInitialNavigated = false; // Track if we've navigated based on activeMode on first load
+let hasInitialNavigated = false;
+
+// RPM Dispense: minimum Off Time (s). 0 is rejected because the firmware
+// then ignores On Time and runs continuously.
+const RPM_DISPENSE_MIN_OFF_TIME_SEC = 0.5; // Track if we've navigated based on activeMode on first load
 
 // Control state (Removed controlMode as it's no longer used)
 
@@ -303,7 +310,8 @@ function setupEventHandlers() {
     }
     if (el.dispenseOffTime) {
         el.dispenseOffTime.addEventListener('change', (e) => {
-            const val = Math.min(10, Math.max(0, parseFloat(e.target.value) || 0));
+            const val = Math.min(10, Math.max(RPM_DISPENSE_MIN_OFF_TIME_SEC,
+                parseFloat(e.target.value) || RPM_DISPENSE_MIN_OFF_TIME_SEC));
             e.target.value = val;
         });
     }
@@ -864,11 +872,11 @@ async function saveTubeChange() {
 function startRuntimeTracking() {
     pumpRuntimeStart = Date.now();
 
-    // DB Update every 10 seconds
+    // Runtime counters in maintenance/ are written by the device (every 60 s
+    // while running). The web app only extrapolates them for display;
+    // writing them here as well double-counted runtime.
     if (runtimeUpdateInterval) clearInterval(runtimeUpdateInterval);
-    runtimeUpdateInterval = setInterval(() => {
-        updateRuntimeInDB();
-    }, 10000);
+    runtimeUpdateInterval = null;
 
     // Local UI update every 1 second
     if (localUiInterval) clearInterval(localUiInterval);
@@ -889,45 +897,11 @@ function stopRuntimeTracking() {
         localUiInterval = null;
     }
 
-    // Save final runtime
-    if (pumpRuntimeStart) {
-        updateRuntimeInDB();
-        pumpRuntimeStart = null;
-    }
+    pumpRuntimeStart = null;
 
     // Final UI update
     updateTubeMaintenanceUI();
     updateMaintenanceInfo();
-}
-
-// Update runtime in database
-async function updateRuntimeInDB() {
-    if (!currentDeviceId || !pumpRuntimeStart) return;
-
-    try {
-        // Calculate elapsed seconds since pump started
-        const elapsedSeconds = Math.floor((Date.now() - pumpRuntimeStart) / 1000);
-
-        if (elapsedSeconds < 1) return;
-
-        // Update tube runtime
-        const refTube = FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance/tubeRuntimeSeconds');
-        await refTube.transaction((currentVal) => {
-            return (currentVal || 0) + elapsedSeconds;
-        });
-
-        // Update total runtime
-        const refTotal = FirebaseApp.getDeviceRef(currentDeviceId).child('maintenance/totalRuntimeSeconds');
-        await refTotal.transaction((currentVal) => {
-            return (currentVal || 0) + elapsedSeconds;
-        });
-
-        // Reset start time for next interval
-        pumpRuntimeStart = Date.now();
-
-    } catch (error) {
-        console.error('Error updating runtime:', error);
-    }
 }
 
 function updateTubeMaintenanceUI() {
@@ -981,7 +955,7 @@ async function togglePump() {
     }
 
     // For starting pump, check connection
-    if (!connection || !connection.online) {
+    if (!deviceOnlineStatus) {
         Utils.showWarning('Device is offline');
         return;
     }
@@ -1204,7 +1178,7 @@ function setControlsEnabled(enabled) {
  * Update controls state based on device online status and calibration
  */
 function updateControlsState() {
-    const isOnline = connection && connection.online;
+    const isOnline = deviceOnlineStatus;
 
     // Only lock ACTION buttons when offline, not input controls
     // Users should be able to adjust RPM/Flow even before connecting
@@ -1214,9 +1188,10 @@ function updateControlsState() {
         el.volumeDispenseBtn
     ];
 
-    // Disable/Enable action buttons based on connection
+    // Disable/Enable action buttons based on connection.
+    // While the pump runs these buttons act as Stop, which must always work.
     actionButtons.forEach(btn => {
-        if (btn) btn.disabled = !isOnline;
+        if (btn) btn.disabled = !isOnline && !isPumpRunning;
     });
 
     // Start/Stop button - only disable START when offline, STOP always works
@@ -1234,8 +1209,8 @@ function updateControlsState() {
 
     // Volume dispense button
     if (el.volumeDispenseBtn) {
-        // Volume dispense requires calibration AND connection
-        el.volumeDispenseBtn.disabled = !isOnline || !isCalibrated;
+        // Volume dispense requires calibration AND connection (Stop always works)
+        el.volumeDispenseBtn.disabled = !isPumpRunning && (!isOnline || !isCalibrated);
     }
 
     // Update calibration warning visibility
@@ -1264,6 +1239,7 @@ async function dispenseRpmBased() {
     const onTime = parseFloat(el.dispenseOnTime?.value) || 1;
     const offTime = parseFloat(el.dispenseOffTime?.value) || 0;
     const direction = el.dispenseRpmDirCCW?.classList.contains('active') ? 'CCW' : 'CW';
+    // (volume dispense below has its own offTime where 0 = single shot)
 
     if (rpm < 10 || rpm > 300) {
         Utils.showWarning('Speed must be between 10 and 300 RPM');
@@ -1275,8 +1251,10 @@ async function dispenseRpmBased() {
         return;
     }
 
-    if (offTime < 0 || offTime > 10) {
-        Utils.showWarning('Off Time must be between 0 and 10 seconds');
+    // Off Time 0 is not allowed: the firmware would ignore On Time and run
+    // the pump continuously (same minimum as the device's own RPM Dispense).
+    if (offTime < RPM_DISPENSE_MIN_OFF_TIME_SEC || offTime > 10) {
+        Utils.showWarning(`Off Time must be between ${RPM_DISPENSE_MIN_OFF_TIME_SEC} and 10 seconds`);
         return;
     }
 
@@ -1284,21 +1262,20 @@ async function dispenseRpmBased() {
     setPumpRunning(true);
 
     try {
-        // 1. Set parameters
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('rpmDispense').set({
-            rpm: rpm,
-            onTime: onTime * 1000, // Convert to ms
-            offTime: offTime * 1000, // Convert to ms
-            direction: direction
-        });
-
-        // 2. Trigger action
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
-            activeMode: 'RPM',
-            inputMode: null, // Clear inputMode to avoid conflict
-            acknowledged: false,
-            lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: Date.now()
+        // Parameters and trigger in ONE atomic multi-path update, so the
+        // device can never read the trigger together with stale parameters.
+        await FirebaseApp.getDeviceRef(currentDeviceId).update({
+            'rpmDispense': {
+                rpm: rpm,
+                onTime: Math.round(onTime * 1000),   // ms (integer: firmware reads it as int)
+                offTime: Math.round(offTime * 1000), // ms
+                direction: direction
+            },
+            'liveStatus/activeMode': 'RPM',
+            'liveStatus/inputMode': null, // Clear inputMode to avoid conflict
+            'liveStatus/acknowledged': false,
+            'liveStatus/lastIssuedBy': Auth.getCurrentUserId(),
+            'liveStatus/lastUpdated': Date.now()
         });
 
         Utils.showSuccess(`Running at ${rpm} RPM for ${onTime}s`);
@@ -1376,42 +1353,13 @@ async function dispenseVolume() {
         return;
     }
 
-    // Constants
-    const VOLUME_DISPENSE_RPM = 120;
+    // The device converts targetVolume into motor revolutions itself
+    // (targetVolume / mlPerRev at VOLUME_DISPENSE_RPM), so no rounding of
+    // the requested volume is needed here.
     const mlPerRev = tubeConfig?.mlPerRev || 0;
+    const onTimeSec = Utils.calculateDispenseTime(requestedVolume, mlPerRev, VOLUME_DISPENSE_RPM);
 
-    // Calculate flow rate and time
-    const flowRatePerSec = (VOLUME_DISPENSE_RPM * mlPerRev) / 60; // mL per second
-    const rawOnTimeSec = requestedVolume / flowRatePerSec;
-
-    // Round to 0.1 second precision
-    const roundedOnTimeSec = Math.round(rawOnTimeSec * 10) / 10;
-
-    // Calculate actual volume that will be dispensed
-    const actualVolume = roundedOnTimeSec * flowRatePerSec;
-
-    // Check if adjustment is needed (more than 0.01 mL difference)
-    const needsAdjustment = Math.abs(actualVolume - requestedVolume) > 0.01;
-
-    if (needsAdjustment) {
-        // Show adjustment popup
-        Utils.showVolumeAdjustment(
-            requestedVolume,
-            actualVolume,
-            roundedOnTimeSec,
-            (confirmedVolume) => {
-                // User confirmed - update input and proceed
-                if (el.volumeInput) {
-                    el.volumeInput.value = confirmedVolume.toFixed(2);
-                }
-                executeVolumeDispense(VOLUME_DISPENSE_RPM, roundedOnTimeSec, offTime, direction, confirmedVolume);
-            },
-            null // onCancel - do nothing
-        );
-    } else {
-        // No adjustment needed - proceed directly
-        executeVolumeDispense(VOLUME_DISPENSE_RPM, roundedOnTimeSec, offTime, direction, requestedVolume);
-    }
+    executeVolumeDispense(VOLUME_DISPENSE_RPM, onTimeSec, offTime, direction, requestedVolume);
 }
 
 async function executeVolumeDispense(rpm, onTimeSec, offTimeSec, direction, volume) {
@@ -1419,22 +1367,23 @@ async function executeVolumeDispense(rpm, onTimeSec, offTimeSec, direction, volu
     setPumpRunning(true);
 
     try {
-        // Save with unified structure (same as rpmDispense)
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('volumeDispense').set({
-            rpm: rpm,
-            onTime: Math.round(onTimeSec * 1000), // Convert to ms
-            offTime: Math.round(offTimeSec * 1000), // Convert to ms
-            direction: direction
-        });
-
-        // Trigger action
-        await FirebaseApp.getDeviceRef(currentDeviceId).child('liveStatus').update({
-            activeMode: 'VOLUME',
-            currentRPM: rpm,
-            inputMode: null,
-            acknowledged: false,
-            lastIssuedBy: Auth.getCurrentUserId(),
-            lastUpdated: Date.now()
+        // targetVolume is what the firmware reads. rpm/onTime are kept for
+        // display only (the firmware ignores them). Parameters and trigger
+        // are written in ONE atomic multi-path update.
+        await FirebaseApp.getDeviceRef(currentDeviceId).update({
+            'volumeDispense': {
+                targetVolume: Math.round(volume * 100) / 100, // mL
+                offTime: Math.round(offTimeSec * 1000),       // ms
+                direction: direction,
+                rpm: rpm,
+                onTime: Math.round(onTimeSec * 1000)          // ms, informational
+            },
+            'liveStatus/activeMode': 'VOLUME',
+            'liveStatus/currentRPM': rpm,
+            'liveStatus/inputMode': null,
+            'liveStatus/acknowledged': false,
+            'liveStatus/lastIssuedBy': Auth.getCurrentUserId(),
+            'liveStatus/lastUpdated': Date.now()
         });
 
         Utils.showSuccess(`Dispensing ${volume.toFixed(2)} mL`);
@@ -1523,6 +1472,11 @@ function subscribeToDevice() {
     // Maintenance updates
     maintenanceListener = deviceRef.child('maintenance').on('value', (snapshot) => {
         maintenance = snapshot.val() || {};
+        // New runtime values from the device already include the time run so
+        // far: extrapolate from now on to avoid counting it twice.
+        if (isPumpRunning && pumpRuntimeStart) {
+            pumpRuntimeStart = Date.now();
+        }
         updateMaintenanceInfo();
         updateTubeMaintenanceUI();
     });
@@ -1535,7 +1489,10 @@ function subscribeToDevice() {
             if (el.dispenseRpmInput && data.rpm) el.dispenseRpmInput.value = data.rpm;
             if (el.dispenseRpmSlider && data.rpm) el.dispenseRpmSlider.value = data.rpm;
             if (el.dispenseOnTime && data.onTime !== undefined) el.dispenseOnTime.value = data.onTime / 1000; // Convert ms to seconds
-            if (el.dispenseOffTime && data.offTime !== undefined) el.dispenseOffTime.value = data.offTime / 1000;
+            if (el.dispenseOffTime && data.offTime !== undefined) {
+                // older saved settings may contain 0, which is no longer allowed
+                el.dispenseOffTime.value = Math.max(RPM_DISPENSE_MIN_OFF_TIME_SEC, data.offTime / 1000);
+            }
 
             // Set direction
             if (data.direction === 'CCW') {
@@ -1554,8 +1511,11 @@ function subscribeToDevice() {
         if (data) {
             console.log('📥 Loaded Volume Dispense settings:', data);
 
-            // Calculate volume from onTime (new unified structure)
-            if (data.onTime && data.rpm) {
+            // Volume: targetVolume (current format); older entries only had
+            // onTime/rpm, so fall back to calculating it from those.
+            if (data.targetVolume > 0) {
+                if (el.volumeInput) el.volumeInput.value = Number(data.targetVolume).toFixed(2);
+            } else if (data.onTime && data.rpm) {
                 const mlPerRev = tubeConfig?.mlPerRev || 0;
                 if (mlPerRev > 0) {
                     const onTimeSec = data.onTime / 1000;
@@ -1592,21 +1552,50 @@ function subscribeToDevice() {
     // Force initial state to offline to clear "Connecting..."
     updateConnectionStatus(false);
 
+    connectionWatchStart = Date.now();
     connectionListener = deviceRef.child('connection').on('value', (snapshot) => {
         const val = snapshot.val();
         console.log('📡 RAW Firebase Connection:', val); // Debug Log
         connection = val || {};
-        updateConnectionStatus(connection.online === true);
+        connectionChangedAt = Date.now();
+        refreshOnlineState();
         updateConnectionInfo(); // Update IP/LastSeen in Info page
     }, (error) => {
         console.error('🔥 Firebase Error:', error);
         updateConnectionStatus(false);
     });
 
+    // Liveness changes with time even when no data arrives (power cut),
+    // so re-evaluate periodically.
+    if (onlineRecheckTimer) clearInterval(onlineRecheckTimer);
+    onlineRecheckTimer = setInterval(refreshOnlineState, 5000);
+
     console.log('Subscribed to device:', currentDeviceId);
 }
 
 // setupConnectionMonitoring removed - merged into subscribeToDevice connection listener
+
+/**
+ * Recompute whether the device is online and update the UI if it changed.
+ * Uses the heartbeat timestamp; if the device has no wall-clock time yet
+ * (lastSeen is its uptime counter), a heartbeat must still arrive within
+ * DEVICE_OFFLINE_AFTER_MS while this page is watching.
+ */
+function refreshOnlineState() {
+    let online = Utils.isDeviceOnline(connection);
+
+    const lastSeen = Number(connection?.lastSeen);
+    const hasEpochTime = lastSeen > 1e12;
+    if (online && !hasEpochTime) {
+        const watchedFor = Date.now() - connectionWatchStart;
+        const sinceUpdate = Date.now() - connectionChangedAt;
+        if (watchedFor > Utils.DEVICE_OFFLINE_AFTER_MS && sinceUpdate > Utils.DEVICE_OFFLINE_AFTER_MS) {
+            online = false;
+        }
+    }
+
+    updateConnectionStatus(online);
+}
 
 // ========================================
 // UI UPDATES
@@ -1617,6 +1606,7 @@ function subscribeToDevice() {
  * @param {boolean} isOnline 
  */
 function updateConnectionStatus(isOnline) {
+    deviceOnlineStatus = isOnline;
     const statusText = document.getElementById('sidebarConnectionStatus');
     console.log('🔄 updateConnectionStatus:', isOnline, 'El:', statusText);
 
@@ -1645,32 +1635,16 @@ function updateLiveStatus() {
         hideButtonLoading();
     }
 
-    // STALE STATE CHECK
-    const STALE_THRESHOLD = 30 * 60 * 1000; // 30 minutes
     const lastUpdatedTime = liveStatus.lastUpdated || liveStatus.updatedAt;
-    let isStale = false;
 
-    if (lastUpdatedTime) {
-        const diff = Date.now() - new Date(lastUpdatedTime).getTime();
-        if (diff > STALE_THRESHOLD) {
-            isStale = true;
-            console.warn('⚠️ Stale liveStatus detected. Treating as STOPPED.');
-        }
-    }
-
-    // Determine pump running state from activeMode
-    // If stale, assume pump is NOT running regardless of activeMode
-    let running = (liveStatus.activeMode && liveStatus.activeMode !== 'NONE');
-    if (isStale) {
-        running = false;
-    }
-
-    // Check connection validity (using separate connection state)
-    if (connection && !connection.online) {
-        setPumpRunning(false);
-    } else {
-        setPumpRunning(running);
-    }
+    // The pump state comes from activeMode only. The device resets it to
+    // "NONE" itself (local stop, end of a volume dispense, fail-safe on lost
+    // connection). It is not overridden by age or by the device being
+    // offline: a run may legitimately last hours, and while offline the
+    // Stop button must stay available so a stop command is queued for the
+    // moment the device reconnects.
+    const running = (liveStatus.activeMode && liveStatus.activeMode !== 'NONE');
+    setPumpRunning(running);
 
     // If running, ensure flow tracking is active
     if (running && !flowUpdateInterval) {
@@ -1761,36 +1735,6 @@ function updateTubeSettings() {
     // Crucial: Re-check calibration status whenever tube config changes
     checkCalibration();
 }
-
-function checkCalibration() {
-    console.log('Checking Calibration. TubeConfig:', tubeConfig);
-    const mlPerRev = tubeConfig?.mlPerRev || 0;
-    const tubeName = tubeConfig?.tubeName || '';
-
-    // Consider calibrated if mlPerRev > 0. tubeName is less critical but good practice.
-    isCalibrated = (mlPerRev > 0);
-
-    if (el.calibWarning) {
-        el.calibWarning.classList.toggle('hidden', isCalibrated);
-    }
-
-    if (el.dispenseWarning) {
-        el.dispenseWarning.classList.toggle('hidden', isCalibrated);
-    }
-
-    if (el.volumeModeTab) {
-        el.volumeModeTab.classList.toggle('disabled', !isCalibrated);
-        // If we lost calibration while in volume mode, switch back
-        if (!isCalibrated && dispenseMode === 'volume') {
-            switchDispenseMode('rpm');
-        }
-    }
-
-    updateEstimatedTime();
-    updateFlowDisplay();
-}
-
-
 
 function updateIdentityInfo() {
     if (!identity) return;
@@ -1907,6 +1851,10 @@ function handleControllerLock(isLocked, lockedByEmail = '', startTime = null) {
 // CLEANUP
 // ========================================
 function cleanup() {
+    if (onlineRecheckTimer) {
+        clearInterval(onlineRecheckTimer);
+        onlineRecheckTimer = null;
+    }
     if (!currentDeviceId) return;
 
     // Stop heartbeat (session cleanup is handled in session.js)

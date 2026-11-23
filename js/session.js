@@ -196,14 +196,14 @@ async function releaseAllSessions() {
     if (!uid) return;
 
     try {
-        // Get all devices
-        const devicesSnapshot = await FirebaseApp.database.ref('devices').once('value');
-        const devices = devicesSnapshot.val() || {};
+        // Only the user's own linked devices are readable (database.rules.json),
+        // so check those instead of reading the whole devices/ tree.
+        const linked = await Auth.getUserLinkedDevices(uid);
 
         // Check each device's session
         const releasePromises = [];
-        for (const deviceId of Object.keys(devices)) {
-            const session = devices[deviceId]?.session;
+        for (const deviceId of Object.keys(linked)) {
+            const session = await getDeviceSession(deviceId);
             if (session && session.activeUser === uid) {
                 console.log(`Releasing session for device: ${deviceId}`);
                 releasePromises.push(
